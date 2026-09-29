@@ -57,6 +57,8 @@ src/
 |---|---|
 | Analyzer JSON | `{ tables:[{name, measures:[{name,dax}], columns}], visuals:[{page,name,type,measures}] }` |
 | `model.bim` / TMSL | tables, columns, measures, calculated columns |
+| **TMDL** (`definition/tables/*.tmdl`) | tables, columns, measures, calculated columns (PBIP semantic model) |
+| **PBIR** (`definition/pages/*/page.json`, `visuals/*/visual.json`) | pages, visuals and every field used – incl. sort, filters and conditional formatting (PBIP report) |
 | PBIX `Report/Layout` | pages, visuals, used fields |
 
-Select several files at once (e.g. `model.bim` + `Layout`) – they are merged. To add a real Power BI import (PBIP, XMLA endpoint, Fabric REST, …) implement `ReportImporter` (`src/import/types.ts`) and register it in `src/import/registry.ts`; the engine stays untouched.
+Use **Select PBIP folder** to load a whole `*.SemanticModel` / `*.Report` folder in one go. Or select several files at once (e.g. `model.bim` + `Layout`) – they are merged. To add a real Power BI import (PBIP, XMLA endpoint, Fabric REST, …) implement `ReportImporter` (`src/import/types.ts`) and register it in `src/import/registry.ts`; the engine stays untouched.

@@ -1,34 +1,36 @@
-import { useRef, useState } from 'react';
-import { CheckCircle2, FileJson, Upload, XCircle } from 'lucide-react';
+import { useMemo, useRef, useState } from 'react';
+import { CheckCircle2, FileJson, FolderOpen, Upload, XCircle } from 'lucide-react';
 import { useApp } from '../../state/AppState';
 import { demoModel } from '../../data/demoData';
 import { importers } from '../../import/registry';
-import { importSource, mergeModels, readFileText, toSource, type FileImportOutcome } from '../../import/registry';
-import type { ReportModel } from '../../types/powerbi';
+import { mergeModels, processSources, readFileText, toSource } from '../../import/registry';
+import type { ImportSource } from '../../import/types';
 import { downloadBlob } from '../../utils/export';
 import { PageHeader } from '../common/ui';
 
 export function ImportPage() {
   const { setModel, navigate, model } = useApp();
-  const [outcomes, setOutcomes] = useState<FileImportOutcome[]>([]);
+  const [sources, setSources] = useState<ImportSource[]>([]);
   const [paste, setPaste] = useState('');
   const [mode, setMode] = useState<'replace' | 'merge'>('replace');
   const [drag, setDrag] = useState(false);
   const input = useRef<HTMLInputElement>(null);
+  const folder = useRef<HTMLInputElement>(null);
 
-  const readFiles = async (files: FileList | File[]) => {
-    const res: FileImportOutcome[] = [];
-    for (const f of Array.from(files)) res.push(importSource(toSource(f.name, await readFileText(f))));
-    setOutcomes((cur) => [...cur, ...res]);
+  const readFiles = async (files: FileList | File[], fromFolder = false) => {
+    const list = Array.from(files).filter((f) => !fromFolder || (/\.(tmdl|json|bim)$/i.test(f.name) && !/[\\/]\.pbi[\\/]/.test(f.webkitRelativePath)));
+    const res: ImportSource[] = [];
+    for (const f of list) res.push(toSource(f.webkitRelativePath || f.name, await readFileText(f), fromFolder));
+    setSources((cur) => [...cur, ...res]);
   };
-  const ok = outcomes.filter((o) => o.result);
-  const combined: ReportModel | null = ok.length ? mergeModels(...ok.map((o) => o.result!.model)) : null;
+  // Cross-file logic (e.g. PBIR page names) needs all sources at once
+  const { outcomes, model: combined } = useMemo(() => processSources(sources), [sources]);
   const measureCount = combined?.tables.reduce((a, t) => a + t.measures.length, 0) ?? 0;
 
   const apply = () => {
     if (!combined) return;
     setModel(mode === 'merge' ? mergeModels(model, combined) : combined);
-    setOutcomes([]);
+    setSources([]);
     navigate('dashboard');
   };
 
@@ -47,21 +49,23 @@ export function ImportPage() {
             role="button" tabIndex={0} onKeyDown={(e) => e.key === 'Enter' && input.current?.click()}
           >
             <Upload className="text-blue-500" />
-            <div className="font-medium">Drop JSON files here or click to browse</div>
-            <div className="text-sm text-slate-500">You can select several files at once, e.g. <code>model.bim</code> + report <code>Layout</code>.</div>
-            <input ref={input} type="file" accept=".json,.bim,.txt,*" multiple hidden onChange={(e) => e.target.files && void readFiles(e.target.files)} />
+            <div className="font-medium">Drop files here or click to browse</div>
+            <div className="text-sm text-slate-500">JSON, <code>model.bim</code>, <code>.tmdl</code>, PBIR <code>visual.json</code>. Select several files at once (e.g. all TMDL tables + the report).</div>
+            <button type="button" className="btn mt-2" onClick={(e) => { e.stopPropagation(); folder.current?.click(); }}><FolderOpen size={14} /> Select PBIP folder</button>
+            <input ref={input} type="file" multiple hidden onChange={(e) => e.target.files && void readFiles(e.target.files)} />
+            <input ref={folder} type="file" hidden onChange={(e) => e.target.files && void readFiles(e.target.files, true)} {...({ webkitdirectory: '', directory: '' } as object)} />
           </div>
 
           <div className="card p-4">
             <label className="label" htmlFor="paste">…or paste JSON</label>
             <textarea id="paste" className="input font-mono text-xs" rows={6} value={paste} placeholder='{ "tables": [ … ], "visuals": [ … ] }' onChange={(e) => setPaste(e.target.value)} spellCheck={false} />
-            <button className="btn mt-2" disabled={!paste.trim()} onClick={() => { setOutcomes((c) => [...c, importSource(toSource('pasted.json', paste))]); setPaste(''); }}>Analyse pasted JSON</button>
+            <button className="btn mt-2" disabled={!paste.trim()} onClick={() => { setSources((c) => [...c, toSource('pasted.json', paste)]); setPaste(''); }}>Analyse pasted JSON</button>
           </div>
 
           {outcomes.length > 0 && (
             <div className="card p-4">
               <h2 className="mb-3 font-semibold">Detected files</h2>
-              <ul className="space-y-2">
+              <ul className="max-h-96 space-y-2 overflow-auto">
                 {outcomes.map((o, i) => (
                   <li key={i} className="flex items-start gap-2 text-sm">
                     {o.result ? <CheckCircle2 size={16} className="mt-0.5 text-emerald-500" /> : <XCircle size={16} className="mt-0.5 text-red-500" />}
@@ -69,7 +73,7 @@ export function ImportPage() {
                       <div><b>{o.fileName}</b> {o.importer && <span className="text-slate-500">· {o.importer.label}</span>}</div>
                       <div className="text-xs text-slate-500">{o.result ? o.result.notes.join(' · ') : o.error}</div>
                     </div>
-                    <button className="ml-auto text-xs text-slate-400 hover:text-red-500" onClick={() => setOutcomes((c) => c.filter((_, j) => j !== i))}>remove</button>
+                    <button className="ml-auto text-xs text-slate-400 hover:text-red-500" onClick={() => setSources((c) => c.filter((x) => x.fileName !== o.fileName))}>remove</button>
                   </li>
                 ))}
               </ul>

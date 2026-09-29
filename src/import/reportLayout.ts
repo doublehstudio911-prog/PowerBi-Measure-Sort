@@ -1,4 +1,5 @@
 import type { ReportModel, Visual } from '../types/powerbi';
+import { collectFieldRefs } from './pbiFields';
 import type { ImportResult, ImportSource, ReportImporter } from './types';
 
 type Obj = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -15,25 +16,6 @@ function maybeParse(x: unknown): Obj | null {
     }
   }
   return null;
-}
-
-/** Extracts "Table[Field]" from a prototypeQuery select item (Measure / Column / Aggregation / Hierarchy). */
-function selectToField(item: Obj, aliases: Map<string, string>): { kind: 'measure' | 'column'; ref: string } | null {
-  const walk = (node: Obj | undefined): { kind: 'measure' | 'column'; ref: string } | null => {
-    if (!node) return null;
-    for (const kind of ['Measure', 'Column'] as const) {
-      const f = node[kind];
-      if (isObj(f)) {
-        const src = f.Expression?.SourceRef;
-        const table = src?.Entity ?? aliases.get(src?.Source) ?? src?.Source ?? '';
-        return { kind: kind === 'Measure' ? 'measure' : 'column', ref: table ? `${table}[${f.Property}]` : `[${f.Property}]` };
-      }
-    }
-    if (isObj(node.Aggregation)) return walk(node.Aggregation.Expression);
-    if (isObj(node.HierarchyLevel)) return walk(node.HierarchyLevel.Expression?.Hierarchy);
-    return null;
-  };
-  return walk(item);
 }
 
 /** Legacy PBIX `Report/Layout` JSON (sections → visualContainers → config). */
@@ -55,13 +37,7 @@ export const reportLayoutImporter: ReportImporter = {
         if (!sv) continue; // groups, shapes without query
         const query = sv.prototypeQuery ?? maybeParse(vc.query)?.Commands?.[0]?.SemanticQueryDataShapeCommand?.Query;
         const aliases = new Map<string, string>((query?.From ?? []).map((f: Obj) => [f.Name, f.Entity]));
-        const measures: string[] = [];
-        const columns: string[] = [];
-        for (const item of (query?.Select ?? []) as Obj[]) {
-          const f = selectToField(item, aliases);
-          if (!f) continue;
-          (f.kind === 'measure' ? measures : columns).push(f.ref);
-        }
+        const { measures, columns } = collectFieldRefs(sv, aliases);
         const title = sv.vcObjects?.title?.[0]?.properties?.text?.expr?.Literal?.Value;
         const id = String(config.name ?? `${page}#${n}`);
         visuals.push({
@@ -69,8 +45,8 @@ export const reportLayoutImporter: ReportImporter = {
           page,
           name: typeof title === 'string' ? title.replace(/^'|'$/g, '') : `${sv.visualType ?? 'visual'} ${++n}`,
           type: String(sv.visualType ?? 'Other'),
-          measures: [...new Set(measures)],
-          columns: [...new Set(columns)],
+          measures,
+          columns,
           fields: [],
         });
       }

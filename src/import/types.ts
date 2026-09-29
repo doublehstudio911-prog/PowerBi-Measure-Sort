@@ -6,12 +6,16 @@ export interface ImportSource {
   text: string;
   /** Parsed JSON, or undefined if the text is not valid JSON */
   json?: unknown;
+  /** Came from a folder upload: unknown files are skipped silently */
+  optional?: boolean;
 }
 
 /** Partial: a file may contribute only a model (BIM) or only visuals (report layout). */
 export interface ImportResult {
   model: ReportModel;
   notes: string[];
+  /** page id → display name (PBIR page.json) */
+  pageNames?: Record<string, string>;
 }
 
 /**
