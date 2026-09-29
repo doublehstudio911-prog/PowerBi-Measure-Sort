@@ -3,6 +3,7 @@ import { CheckCircle2, FileJson, FolderOpen, Upload, XCircle } from 'lucide-reac
 import { useApp } from '../../state/AppState';
 import { demoModel } from '../../data/demoData';
 import { importers } from '../../import/registry';
+import { collectDropped, type PathedFile } from '../../import/dropFiles';
 import { mergeModels, processSources, readFileText, toSource } from '../../import/registry';
 import type { ImportSource } from '../../import/types';
 import { downloadBlob } from '../../utils/export';
@@ -17,12 +18,15 @@ export function ImportPage() {
   const input = useRef<HTMLInputElement>(null);
   const folder = useRef<HTMLInputElement>(null);
 
-  const readFiles = async (files: FileList | File[], fromFolder = false) => {
-    const list = Array.from(files).filter((f) => !fromFolder || (/\.(tmdl|json|bim)$/i.test(f.name) && !/[\\/]\.pbi[\\/]/.test(f.webkitRelativePath)));
+  /** `fromFolder`: unknown / irrelevant files are skipped silently instead of being listed as errors */
+  const readFiles = async (files: PathedFile[], fromFolder = false) => {
+    const list = files.filter((f) => !fromFolder || (/\.(tmdl|json|bim)$/i.test(f.path) && !/(^|[\\/])\.pbi[\\/]/.test(f.path)));
     const res: ImportSource[] = [];
-    for (const f of list) res.push(toSource(f.webkitRelativePath || f.name, await readFileText(f), fromFolder));
+    for (const f of list) res.push(toSource(f.path, await readFileText(f.file), fromFolder));
     setSources((cur) => [...cur, ...res]);
   };
+  const fromInput = (fl: FileList, folderMode: boolean) =>
+    readFiles(Array.from(fl).map((file) => ({ file, path: file.webkitRelativePath || file.name })), folderMode);
   // Cross-file logic (e.g. PBIR page names) needs all sources at once
   const { outcomes, model: combined } = useMemo(() => processSources(sources), [sources]);
   const measureCount = combined?.tables.reduce((a, t) => a + t.measures.length, 0) ?? 0;
@@ -45,15 +49,15 @@ export function ImportPage() {
             onClick={() => input.current?.click()}
             onDragOver={(e) => { e.preventDefault(); setDrag(true); }}
             onDragLeave={() => setDrag(false)}
-            onDrop={(e) => { e.preventDefault(); setDrag(false); void readFiles(e.dataTransfer.files); }}
+            onDrop={(e) => { e.preventDefault(); setDrag(false); void collectDropped(e.dataTransfer).then((d) => readFiles(d.files, d.hadFolder)); }}
             role="button" tabIndex={0} onKeyDown={(e) => e.key === 'Enter' && input.current?.click()}
           >
             <Upload className="text-blue-500" />
-            <div className="font-medium">Drop files here or click to browse</div>
+            <div className="font-medium">Drop files or a whole folder here, or click to browse</div>
             <div className="text-sm text-slate-500">JSON, <code>model.bim</code>, <code>.tmdl</code>, PBIR <code>visual.json</code>. Select several files at once (e.g. all TMDL tables + the report).</div>
             <button type="button" className="btn mt-2" onClick={(e) => { e.stopPropagation(); folder.current?.click(); }}><FolderOpen size={14} /> Select PBIP folder</button>
-            <input ref={input} type="file" multiple hidden onChange={(e) => e.target.files && void readFiles(e.target.files)} />
-            <input ref={folder} type="file" hidden onChange={(e) => e.target.files && void readFiles(e.target.files, true)} {...({ webkitdirectory: '', directory: '' } as object)} />
+            <input ref={input} type="file" multiple hidden onChange={(e) => e.target.files && void fromInput(e.target.files, false).then(() => { e.target.value = ''; })} />
+            <input ref={folder} type="file" hidden onChange={(e) => e.target.files && void fromInput(e.target.files, true).then(() => { e.target.value = ''; })} {...({ webkitdirectory: '', directory: '' } as object)} />
           </div>
 
           <div className="card p-4">
