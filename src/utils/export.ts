@@ -1,0 +1,95 @@
+import type { AnalysisResult, MeasureInfo } from '../types/powerbi';
+
+const shortName = (a: AnalysisResult, id: string) => a.measures.get(id)?.name ?? id;
+
+const STATUS_LABEL = { direct: 'Direct', indirect: 'Indirect', unused: 'Unused' } as const;
+
+function usedBy(a: AnalysisResult, m: MeasureInfo): string[] {
+  return [
+    ...m.usedByMeasures.map((id) => `Measure: ${shortName(a, id)}`),
+    ...m.usedByColumns.map((c) => `Column: ${c}`),
+    ...m.directVisuals.map((v) => `Visual: ${a.visuals.get(v)?.page} / ${a.visuals.get(v)?.name}`),
+  ];
+}
+
+export const MEASURE_HEADERS = ['Measure', 'Table', 'Status', 'DirectUsage', 'IndirectUsage', 'UsedBy', 'DependsOn', 'Circular', 'DAX'];
+
+export function measureRows(a: AnalysisResult): (string | number)[][] {
+  return a.measureOrder.map((id) => {
+    const m = a.measures.get(id)!;
+    return [
+      m.name, m.table, STATUS_LABEL[m.status], m.directVisuals.length, m.indirectMeasureUsages,
+      usedBy(a, m).join('; '), m.dependsOn.map((d) => shortName(a, d)).join('; '), m.inCycle ? 'yes' : 'no', m.dax,
+    ];
+  });
+}
+
+/** RFC 4180 CSV; also neutralises spreadsheet formula injection (=, +, -, @ at cell start). */
+export function toCsv(a: AnalysisResult): string {
+  const cell = (v: string | number) => {
+    let s = String(v);
+    if (/^[=+\-@\t\r]/.test(s) && typeof v === 'string') s = `'${s}`;
+    return /[",\n\r;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  return [MEASURE_HEADERS, ...measureRows(a)].map((r) => r.map(cell).join(',')).join('\r\n');
+}
+
+export function toJson(a: AnalysisResult): string {
+  const obj = {
+    summary: a.summary,
+    measures: a.measureOrder.map((id) => {
+      const m = a.measures.get(id)!;
+      return {
+        id, name: m.name, table: m.table, dax: m.dax, status: m.status, isDirect: m.isDirect, isIndirect: m.isIndirect,
+        directUsageCount: m.directVisuals.length, indirectUsageCount: m.indirectMeasureUsages,
+        dependsOn: m.dependsOn, usedByMeasures: m.usedByMeasures, usedByColumns: m.usedByColumns,
+        usedTables: m.usedTables, usedColumns: m.usedColumns,
+        directVisuals: m.directVisuals, indirectVisuals: m.indirectVisuals,
+        inCycle: m.inCycle, depth: m.depth, reason: m.reason,
+      };
+    }),
+    visuals: [...a.visuals.values()],
+    tables: [...a.tables.values()].map((t) => ({ name: t.name, measures: t.measureIds, columns: t.columns })),
+    circularDependencies: a.cycles,
+    longestChains: a.longestChains,
+    warnings: a.warnings,
+  };
+  return JSON.stringify(obj, null, 2);
+}
+
+export async function toXlsxBytes(a: AnalysisResult): Promise<Uint8Array> {
+  const XLSX = await import('xlsx');
+  const wb = XLSX.utils.book_new();
+  const guard = (rows: (string | number)[][]) =>
+    rows.map((r) => r.map((c) => (typeof c === 'string' && /^[=+\-@]/.test(c) ? `'${c}` : c)));
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(guard([MEASURE_HEADERS, ...measureRows(a)])), 'Measures');
+  XLSX.utils.book_append_sheet(
+    wb,
+    XLSX.utils.aoa_to_sheet(guard([
+      ['Measure', 'Table', 'DAX', 'Last modified', 'Referenced by (any measure)'],
+      ...a.measureOrder.map((id) => a.measures.get(id)!).filter((m) => m.status === 'unused')
+        .map((m) => [m.name, m.table, m.dax, m.lastModified ?? '', m.usedByMeasures.length]),
+    ])),
+    'Unused',
+  );
+  XLSX.utils.book_append_sheet(
+    wb,
+    XLSX.utils.aoa_to_sheet(guard([
+      ['Page', 'Visual', 'Type', 'Measures', 'Columns'],
+      ...[...a.visuals.values()].map((v) => [
+        v.page, v.name, v.type, v.measures.map((m) => shortName(a, m)).join('; '), v.columns.map((c) => `${c.table}[${c.column}]`).join('; '),
+      ]),
+    ])),
+    'Visuals',
+  );
+  return XLSX.write(wb, { type: 'array', bookType: 'xlsx' }) as Uint8Array;
+}
+
+export function downloadBlob(name: string, data: BlobPart, type: string) {
+  const url = URL.createObjectURL(new Blob([data], { type }));
+  const el = document.createElement('a');
+  el.href = url;
+  el.download = name;
+  el.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
