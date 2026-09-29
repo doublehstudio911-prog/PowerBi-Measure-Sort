@@ -10,7 +10,9 @@ import { downloadBlob } from '../../utils/export';
 import { PageHeader } from '../common/ui';
 
 export function ImportPage() {
-  const { setModel, navigate, model } = useApp();
+  const { setModel, navigate, model, currentProject, createProject, closeProject } = useApp();
+  const [projName, setProjName] = useState('');
+  const [saveIt, setSaveIt] = useState(true);
   const [sources, setSources] = useState<ImportSource[]>([]);
   const [paste, setPaste] = useState('');
   const [mode, setMode] = useState<'replace' | 'merge'>('replace');
@@ -31,10 +33,24 @@ export function ImportPage() {
   const { outcomes, model: combined } = useMemo(() => processSources(sources), [sources]);
   const measureCount = combined?.tables.reduce((a, t) => a + t.measures.length, 0) ?? 0;
 
-  const apply = () => {
+  const firstName = sources[0]?.fileName.split(/[\\/]/)[0]?.replace(/\.(tmdl|json|bim|SemanticModel|Report)$/i, '') ?? '';
+  const defaultName = combined?.name || firstName || 'Imported model';
+  const merging = mode === 'merge' && !!currentProject;
+
+  const apply = async () => {
     if (!combined) return;
-    setModel(mode === 'merge' ? mergeModels(model, combined) : combined);
+    if (merging) {
+      setModel(mergeModels(model, combined)); // autosaved into the open project
+    } else if (mode === 'merge') {
+      setModel(mergeModels(model, combined));
+    } else if (saveIt) {
+      await createProject(projName.trim() || defaultName, combined);
+    } else {
+      closeProject();
+      setModel(combined);
+    }
     setSources([]);
+    setProjName('');
     navigate('dashboard');
   };
 
@@ -88,7 +104,14 @@ export function ImportPage() {
                     <option value="replace">Replace current model</option>
                     <option value="merge">Merge into current model</option>
                   </select>
-                  <button className="btn btn-primary" onClick={apply}>Import &amp; analyse</button>
+                  {!merging && mode === 'replace' && (
+                    <>
+                      <label className="flex items-center gap-1.5 text-sm"><input type="checkbox" checked={saveIt} onChange={(e) => setSaveIt(e.target.checked)} /> Save as project</label>
+                      {saveIt && <input className="input w-56" aria-label="Project name" placeholder={defaultName} value={projName} onChange={(e) => setProjName(e.target.value)} />}
+                    </>
+                  )}
+                  {merging && <span className="text-xs text-slate-500">Merged into “{currentProject?.name}” and saved automatically.</span>}
+                  <button className="btn btn-primary" onClick={() => void apply()}>Import &amp; analyse</button>
                 </div>
               )}
             </div>

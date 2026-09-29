@@ -1,9 +1,13 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { analyzeModel } from '../engine';
 import { demoModel } from '../data/demoData';
+import {
+  deleteProject, listProjects, loadProject, newId, renameProject as renameInStore, requestPersistence, saveProject, type ProjectMeta,
+} from './projectStore';
 import type { AnalysisResult, MeasureId, ReportModel, UsageStatus, VisualCategory } from '../types/powerbi';
 
-export type View = 'dashboard' | 'measures' | 'dependencies' | 'unused' | 'visuals' | 'tables' | 'import' | 'settings';
+export type View = 'dashboard' | 'measures' | 'dependencies' | 'unused' | 'visuals' | 'tables' | 'projects' | 'import' | 'settings';
+export type SaveStatus = 'none' | 'saving' | 'saved' | 'error';
 export type Theme = 'light' | 'dark';
 
 export interface Filters {
@@ -32,27 +36,26 @@ interface AppState {
   resetFilters: () => void;
   selected: MeasureId | null;
   selectMeasure: (id: MeasureId | null) => void;
+  /** Saved-project library (IndexedDB) */
+  ready: boolean;
+  projects: ProjectMeta[];
+  currentProject: { id: string; name: string } | null;
+  saveStatus: SaveStatus;
+  /** Creates a new project from `model` (default: the current one), makes it current. */
+  createProject: (name: string, model?: ReportModel) => Promise<void>;
+  openProject: (id: string) => Promise<void>;
+  /** Detach from the current project (further edits are not saved anywhere) */
+  closeProject: () => void;
+  removeProject: (id: string) => Promise<void>;
+  renameProject: (id: string, name: string) => Promise<void>;
   /** Measure shown in the dependency graph */
   graphFocus: MeasureId | null;
   openInGraph: (id: MeasureId | null) => void;
 }
 
 const Ctx = createContext<AppState | null>(null);
-const MODEL_KEY = 'pbi-analyzer:model:v1';
+const CURRENT_KEY = 'pbi-analyzer:current-project';
 const THEME_KEY = 'pbi-analyzer:theme';
-
-function loadModel(): ReportModel {
-  try {
-    const raw = localStorage.getItem(MODEL_KEY);
-    if (raw) {
-      const m = JSON.parse(raw) as ReportModel;
-      if (Array.isArray(m.tables) && Array.isArray(m.visuals)) return m;
-    }
-  } catch {
-    /* ignore corrupt / unavailable storage */
-  }
-  return demoModel;
-}
 
 function loadTheme(): Theme {
   try {
@@ -63,7 +66,13 @@ function loadTheme(): Theme {
 }
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  const [model, setModelState] = useState<ReportModel>(loadModel);
+  const [model, setModelState] = useState<ReportModel>(demoModel);
+  const [ready, setReady] = useState(false);
+  const [projects, setProjects] = useState<ProjectMeta[]>([]);
+  const [currentProject, setCurrentProject] = useState<{ id: string; name: string } | null>(null);
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>('none');
+  /** The model object that is already persisted – edits produce a new object, which triggers autosave */
+  const persistedModel = useRef<ReportModel | null>(null);
   const [view, setView] = useState<View>('dashboard');
   const [theme, setThemeState] = useState<Theme>(loadTheme);
   const [query, setQuery] = useState('');
@@ -79,13 +88,62 @@ export function AppProvider({ children }: { children: ReactNode }) {
     try { localStorage.setItem(THEME_KEY, theme); } catch { /* ignore */ }
   }, [theme]);
 
+  const refreshProjects = useCallback(async () => {
+    try { setProjects(await listProjects()); } catch { /* IndexedDB unavailable */ }
+  }, []);
+
+  const markCurrent = (p: { id: string; name: string } | null) => {
+    setCurrentProject(p);
+    try { if (p) localStorage.setItem(CURRENT_KEY, p.id); else localStorage.removeItem(CURRENT_KEY); } catch { /* ignore */ }
+  };
+
+  // Startup: reopen the last project
   useEffect(() => {
-    // Local only – nothing ever leaves the browser.
-    const t = setTimeout(() => {
-      try { localStorage.setItem(MODEL_KEY, JSON.stringify(model)); } catch { /* quota / private mode */ }
-    }, 300);
+    (async () => {
+      try {
+        await refreshProjects();
+        const id = localStorage.getItem(CURRENT_KEY);
+        const p = id ? await loadProject(id) : undefined;
+        if (p) {
+          persistedModel.current = p.model;
+          setModelState(p.model);
+          setCurrentProject({ id: p.id, name: p.name });
+          setSaveStatus('saved');
+        }
+      } catch { /* start with demo data */ }
+      setReady(true);
+    })();
+  }, [refreshProjects]);
+
+  // Autosave: into the current project, or – for hand-entered data – into an automatically created one
+  const autoCreating = useRef(false);
+  useEffect(() => {
+    if (!ready || model === persistedModel.current || model === demoModel) return;
+    const empty = model.tables.length === 0 && model.visuals.length === 0;
+    if (!currentProject && empty) return;
+    setSaveStatus('saving');
+    const t = setTimeout(async () => {
+      try {
+        let target = currentProject;
+        if (!target) {
+          if (autoCreating.current) return;
+          autoCreating.current = true;
+          target = { id: newId(), name: model.name || 'Untitled project' };
+          markCurrent(target);
+        }
+        requestPersistence();
+        await saveProject({ id: target.id, name: target.name, model });
+        persistedModel.current = model;
+        setSaveStatus('saved');
+        await refreshProjects();
+      } catch {
+        setSaveStatus('error');
+      } finally {
+        autoCreating.current = false;
+      }
+    }, 500);
     return () => clearTimeout(t);
-  }, [model]);
+  }, [model, ready, currentProject, refreshProjects]);
 
   const setModel = useCallback((m: ReportModel) => {
     setModelState(m);
@@ -95,10 +153,46 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
   const updateModel = useCallback((fn: (d: ReportModel) => ReportModel) => setModelState((m) => fn(m)), []);
 
+  const createProject = async (name: string, m: ReportModel = model) => {
+    const p = { id: newId(), name: name.trim() || 'Untitled project' };
+    setSaveStatus('saving');
+    try {
+      requestPersistence();
+      await saveProject({ ...p, model: m });
+      persistedModel.current = m;
+      if (m !== model) setModel(m);
+      markCurrent(p);
+      setSaveStatus('saved');
+      await refreshProjects();
+    } catch (e) {
+      setSaveStatus('error');
+      throw e;
+    }
+  };
+  const openProject = async (id: string) => {
+    const p = await loadProject(id);
+    if (!p) return;
+    persistedModel.current = p.model;
+    setModel(p.model);
+    markCurrent({ id: p.id, name: p.name });
+    setSaveStatus('saved');
+  };
+  const removeProject = async (id: string) => {
+    await deleteProject(id);
+    if (currentProject?.id === id) { markCurrent(null); setSaveStatus('none'); }
+    await refreshProjects();
+  };
+  const renameProject = async (id: string, name: string) => {
+    await renameInStore(id, name);
+    if (currentProject?.id === id) markCurrent({ id, name });
+    await refreshProjects();
+  };
+
   const value: AppState = {
+    ready, projects, currentProject, saveStatus, createProject, openProject, closeProject: () => { markCurrent(null); setSaveStatus('none'); }, removeProject, renameProject,
     model, analysis, setModel, updateModel,
-    loadDemo: () => setModel(demoModel),
-    clearModel: () => setModel({ tables: [], visuals: [] }),
+    loadDemo: () => { markCurrent(null); setSaveStatus('none'); setModel(demoModel); },
+    clearModel: () => { markCurrent(null); setSaveStatus('none'); setModel({ tables: [], visuals: [] }); },
     view, navigate: (v) => setView(v),
     theme, setTheme: setThemeState,
     query, setQuery,

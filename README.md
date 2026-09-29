@@ -23,6 +23,9 @@ Dashboard · Measures (search, filters by status/table/page/visual type) · Unus
 (React Flow: zoom, pan, click-to-highlight, used-by / depends-on, path from page/visual to measure, focus & full-model mode) ·
 Measure detail panel with "why is this used?" · Visuals · Tables (manual entry) · Import · Export (CSV, JSON, Excel) · Dark/Light mode.
 
+## Saved projects
+Imports are saved automatically as **projects** (browser IndexedDB) and edits are autosaved. After a restart of the dev server / Codespace open the app and your last project is back; other projects are one click away under **Projects**. Use *Export* / *Open project file* to back up or move a project to another browser (storage is per browser + address).
+
 ## Semantics
 
 ```

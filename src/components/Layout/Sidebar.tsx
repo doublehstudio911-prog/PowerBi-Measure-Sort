@@ -1,4 +1,4 @@
-import { BarChart3, Boxes, GitFork, LayoutDashboard, Ruler, Settings, Table2, Trash2, Upload } from 'lucide-react';
+import { BarChart3, Boxes, FolderOpen, GitFork, LayoutDashboard, Ruler, Settings, Table2, Trash2, Upload } from 'lucide-react';
 import { useApp, type View } from '../../state/AppState';
 
 const NAV: { id: View; label: string; Icon: typeof Settings }[] = [
@@ -8,6 +8,7 @@ const NAV: { id: View; label: string; Icon: typeof Settings }[] = [
   { id: 'unused', label: 'Unused Measures', Icon: Trash2 },
   { id: 'visuals', label: 'Visuals', Icon: BarChart3 },
   { id: 'tables', label: 'Tables', Icon: Table2 },
+  { id: 'projects', label: 'Projects', Icon: FolderOpen },
   { id: 'import', label: 'Import', Icon: Upload },
   { id: 'settings', label: 'Settings', Icon: Settings },
 ];

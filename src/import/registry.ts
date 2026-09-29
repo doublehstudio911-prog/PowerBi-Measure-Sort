@@ -3,11 +3,12 @@ import { nativeJsonImporter } from './nativeJson';
 import { reportLayoutImporter } from './reportLayout';
 import { tmslImporter } from './tmsl';
 import { tmdlImporter } from './tmdl';
+import { projectFileImporter } from './projectFile';
 import { pbirPageImporter, pbirVisualImporter } from './pbir';
 import type { ImportResult, ImportSource, ReportImporter } from './types';
 
 /** Order matters: most specific first. Register future importers (PBIP, XMLA, …) here. */
-export const importers: ReportImporter[] = [tmdlImporter, tmslImporter, pbirVisualImporter, pbirPageImporter, reportLayoutImporter, nativeJsonImporter];
+export const importers: ReportImporter[] = [projectFileImporter, tmdlImporter, tmslImporter, pbirVisualImporter, pbirPageImporter, reportLayoutImporter, nativeJsonImporter];
 
 export function detectImporter(src: ImportSource): ReportImporter | null {
   return importers.find((i) => i.detect(src)) ?? null;

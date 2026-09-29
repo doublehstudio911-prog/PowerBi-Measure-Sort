@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { BarChart3, Moon, Ruler, Search, Sun, Table2, FileText, Menu } from 'lucide-react';
+import { BarChart3, Check, CircleAlert, FolderOpen, Loader2, Moon, Ruler, Search, Sun, Table2, FileText, Menu } from 'lucide-react';
 import { useApp, type View } from '../../state/AppState';
 import { globalSearch } from '../../utils/filtering';
 import { StatusBadge } from '../common/ui';
@@ -7,7 +7,7 @@ import { StatusBadge } from '../common/ui';
 const MOBILE_NAV: View[] = ['dashboard', 'measures', 'dependencies', 'unused', 'visuals', 'tables', 'import', 'settings'];
 
 export function Topbar() {
-  const { analysis, query, setQuery, navigate, selectMeasure, theme, setTheme, view, setFilters } = useApp();
+  const { currentProject, saveStatus, analysis, query, setQuery, navigate, selectMeasure, theme, setTheme, view, setFilters } = useApp();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const hits = useMemo(() => globalSearch(analysis, query), [analysis, query]);
@@ -70,7 +70,18 @@ export function Topbar() {
           </div>
         )}
       </div>
-      <button className="btn ml-auto" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} aria-label="Toggle theme">
+      <button
+        className="btn ml-auto max-w-56"
+        onClick={() => navigate('projects')}
+        title={currentProject ? 'Changes are saved automatically in this browser. Click to manage projects.' : 'Not saved – click to save this model as a project'}
+      >
+        <FolderOpen size={15} className="shrink-0" />
+        <span className="truncate">{currentProject ? currentProject.name : 'Unsaved'}</span>
+        {saveStatus === 'saving' && <Loader2 size={14} className="shrink-0 animate-spin text-slate-400" />}
+        {saveStatus === 'saved' && <Check size={14} className="shrink-0 text-emerald-500" />}
+        {saveStatus === 'error' && <CircleAlert size={14} className="shrink-0 text-red-500" />}
+      </button>
+      <button className="btn" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} aria-label="Toggle theme">
         {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
       </button>
     </header>

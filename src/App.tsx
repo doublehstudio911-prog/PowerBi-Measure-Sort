@@ -9,10 +9,12 @@ import { DependencyGraphPage } from './components/DependencyGraph/DependencyGrap
 import { VisualsPage } from './components/Visuals/VisualsPage';
 import { TablesPage } from './components/Tables/TablesPage';
 import { ImportPage } from './components/Import/ImportPage';
+import { ProjectsPage } from './components/Projects/ProjectsPage';
 import { SettingsPage } from './components/Settings/SettingsPage';
 
 export default function App() {
-  const { view } = useApp();
+  const { view, ready } = useApp();
+  if (!ready) return <div className="grid h-full place-items-center text-sm text-slate-500">Loading saved projects…</div>;
   return (
     <div className="flex h-full">
       <Sidebar />
@@ -26,6 +28,7 @@ export default function App() {
             {view === 'unused' && <UnusedPage />}
             {view === 'visuals' && <VisualsPage />}
             {view === 'tables' && <TablesPage />}
+            {view === 'projects' && <ProjectsPage />}
             {view === 'import' && <ImportPage />}
             {view === 'settings' && <SettingsPage />}
           </div>
