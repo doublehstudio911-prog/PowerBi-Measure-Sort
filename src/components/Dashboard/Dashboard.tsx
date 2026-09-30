@@ -142,7 +142,7 @@ export function Dashboard() {
       <section className="card mt-4 p-5">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <h2 className="font-semibold">Usage metrics</h2>
-          <button className="text-sm text-blue-600 dark:text-blue-400" onClick={() => navigate('import')}>{usage.hasData ? 'Manage' : 'Import usage metrics'} →</button>
+          <button className="text-sm text-blue-600 dark:text-blue-400" onClick={() => navigate('usage')}>{usage.hasData ? 'Pages & measures' : 'Import usage metrics'} →</button>
         </div>
         {!usage.hasData ? (
           <p className="text-sm text-slate-500">
@@ -173,7 +173,7 @@ export function Dashboard() {
             </ul>
             {usage.unmatched.length > 0 && (
               <p className="mt-3 text-xs text-amber-700 dark:text-amber-300">
-                {usage.unmatched.length} usage page(s) could not be matched to the model: {usage.unmatched.slice(0, 4).map((u) => u.page).join(', ')}{usage.unmatched.length > 4 ? ' …' : ''} – see Import.
+                {usage.unmatched.length} usage page(s) could not be matched to the model: {usage.unmatched.slice(0, 4).map((u) => u.page).join(', ')}{usage.unmatched.length > 4 ? ' …' : ''} – see Usage.
               </p>
             )}
             <UsageDisclaimer className="mt-4" />

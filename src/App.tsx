@@ -9,6 +9,7 @@ import { DependencyGraphPage } from './components/DependencyGraph/DependencyGrap
 import { VisualsPage } from './components/Visuals/VisualsPage';
 import { TablesPage } from './components/Tables/TablesPage';
 import { ImportPage } from './components/Import/ImportPage';
+import { UsagePage } from './components/Usage/UsagePage';
 import { ProjectsPage } from './components/Projects/ProjectsPage';
 import { SettingsPage } from './components/Settings/SettingsPage';
 
@@ -28,6 +29,7 @@ export default function App() {
             {view === 'unused' && <UnusedPage />}
             {view === 'visuals' && <VisualsPage />}
             {view === 'tables' && <TablesPage />}
+            {view === 'usage' && <UsagePage />}
             {view === 'projects' && <ProjectsPage />}
             {view === 'import' && <ImportPage />}
             {view === 'settings' && <SettingsPage />}

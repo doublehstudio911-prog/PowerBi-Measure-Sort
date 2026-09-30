@@ -4,7 +4,7 @@ import { useApp, type View } from '../../state/AppState';
 import { globalSearch } from '../../utils/filtering';
 import { StatusBadge } from '../common/ui';
 
-const MOBILE_NAV: View[] = ['dashboard', 'measures', 'dependencies', 'unused', 'visuals', 'tables', 'import', 'settings'];
+const MOBILE_NAV: View[] = ['dashboard', 'measures', 'dependencies', 'unused', 'visuals', 'tables', 'usage', 'projects', 'import', 'settings'];
 
 export function Topbar() {
   const { currentProject, saveStatus, analysis, query, setQuery, navigate, selectMeasure, theme, setTheme, view, setFilters } = useApp();

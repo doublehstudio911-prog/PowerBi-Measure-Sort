@@ -163,3 +163,23 @@ describe('usage metrics in the model', () => {
       .toEqual([{ page: 'A', views: 5 }, { page: 'C', views: 1250, uniqueUsers: 7, date: '2026-01-01' }]);
   });
 });
+
+describe('usage metrics – real-world export shapes', () => {
+  it('recognises Power BI usage-metrics style headers and falls back to unambiguous "page"/"views" headers', () => {
+    expect(detectMapping(['Report page', 'Total views', 'Unique viewers', 'Day'])).toEqual({ page: 'Report page', views: 'Total views', uniqueUsers: 'Unique viewers', date: 'Day' });
+    // not in the alias list, but a single unambiguous candidate → detected; two candidates → left to the user
+    expect(detectMapping(['Name of the page', 'Count', 'Distinct users'])).toEqual({ page: 'Name of the page' });
+    expect(detectMapping(['Name of the page', 'Number of page opens', 'Distinct users'])).toEqual({});
+    expect(detectMapping(['Page', 'Views [Sum]'])).toEqual({ page: 'Page', views: 'Views [Sum]' });
+    expect(detectMapping(['Page', 'Total views', 'Page views 30d'])).toEqual({ page: 'Page', views: 'Total views' });
+  });
+
+  it('reads UTF-16 CSV (Excel "Unicode text") and Excel "sep=" preamble', async () => {
+    const text = 'sep=;\nSeite;Aufrufe\nStart;12\n';
+    const bytes = new Uint8Array(2 + text.length * 2);
+    bytes[0] = 0xff; bytes[1] = 0xfe;
+    for (let i = 0; i < text.length; i++) { bytes[2 + i * 2] = text.charCodeAt(i); bytes[3 + i * 2] = 0; }
+    const t = await readUsageTable('u.csv', bytes);
+    expect(extractUsageMetrics(t, detectMapping(t.headers)).metrics).toEqual([{ page: 'Start', views: 12 }]);
+  });
+});

@@ -62,8 +62,11 @@ Usage metrics are a **second, separate data source**. PBIP/TMDL/PBIR answer *"wh
 
 > **Page views are not DAX executions.** All numbers derived from them (`…Potential`, `ParameterCandidateViews`, HIGH/MEDIUM/LOW) are estimates of *potential reach*. They are **not** the number of times a measure was evaluated and **not** how often a field-parameter entry was selected – that cannot be determined from the metadata.
 
+### Usage page
+The **Usage** page (sidebar) is the home of everything page-view related: upload area, preview/mapping, summary tiles, a **pages table** (views, unique users, visuals, measures used directly / via field parameter / via dependencies), an expandable **page detail** (every visual with its direct measures, field parameters with their members and dependency measures – click any measure chip for its detail panel), the **measures with the highest potential reach** and all **unmatched usage rows**.
+
 ### Import (CSV, XLSX, XLS)
-Import → *Import usage metrics* (or drop a `.csv`/`.xlsx`/`.xls` onto the import area). Columns are detected automatically from normalised headers (case, spaces and punctuation ignored) and can be re-mapped manually. A preview shows the detected columns, sample values, valid/skipped rows and readable validation errors before anything is imported. The import **merges** into the loaded model – tables, measures and visuals are never overwritten. Choose *Replace* or *Add to existing* if usage data is already loaded.
+Usage → drop or choose a file (also available under Import → *Import usage metrics*, or drop a `.csv`/`.xlsx`/`.xls` onto the import area). Columns are detected automatically from normalised headers (case, spaces and punctuation ignored) and can be re-mapped manually. A preview shows the detected columns, sample values, valid/skipped rows and readable validation errors before anything is imported. The import **merges** into the loaded model – tables, measures and visuals are never overwritten. Choose *Replace* or *Add to existing* if usage data is already loaded.
 
 | Field | Recognised headers (`src/import/usageMetrics.ts → USAGE_COLUMN_ALIASES`, easy to extend) |
 |---|---|
@@ -74,7 +77,7 @@ Import → *Import usage metrics* (or drop a `.csv`/`.xlsx`/`.xls` onto the impo
 | uniqueUsers *(optional)* | Unique users, UniqueUsers, Viewers, Users, Benutzer, Eindeutige Benutzer |
 | date *(optional)* | Date, Activity date, ActivityDate, Datum |
 
-`page` and `views` are required. Views accept `1250`, `1,250`, `1.250`; rows with an empty page or non-numeric/negative/fractional views are skipped and listed. CSV delimiters `, ; TAB |` are detected; for Excel the first sheet with data is used and title rows above the header are skipped.
+`page` and `views` are required. If no alias matches, a single unambiguous header containing "page"/"seite" (or "view"/"aufruf") is picked as fallback; anything else is left to the manual mapping. CSV files may be UTF-8 or UTF-16 (Excel "Unicode text") and may start with Excel's `sep=;` line. Views accept `1250`, `1,250`, `1.250`; rows with an empty page or non-numeric/negative/fractional views are skipped and listed. CSV delimiters `, ; TAB |` are detected; for Excel the first sheet with data is used and title rows above the header are skipped.
 
 ### Matching usage → page → visuals → measures
 1. Rows are matched to report pages by **page id** if the file has one (PBIR page folder / layout section name), otherwise by **normalised name** (trim, collapse whitespace, ignore case). There is **no fuzzy matching**; equal names on several pages are reported as *ambiguous*.

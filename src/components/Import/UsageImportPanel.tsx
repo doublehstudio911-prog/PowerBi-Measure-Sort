@@ -15,13 +15,14 @@ const REASON_TEXT: Record<UnmatchedReason, string> = {
 const fmt = (n: number) => n.toLocaleString('en-US');
 
 /** Import, mapping preview and management of usage metrics. Separate from the PBIP/model import: it never touches tables, measures or visuals. */
-export function UsageImportPanel({ incoming, onConsumed }: { incoming: File | null; onConsumed: () => void }) {
+export function UsageImportPanel({ incoming, onConsumed, onImported }: { incoming: File | null; onConsumed: () => void; onImported?: () => void }) {
   const { model, analysis, updateModel } = useApp();
   const [raw, setRaw] = useState<RawTable | null>(null);
   const [mapping, setMapping] = useState<UsageMapping>({});
   const [mode, setMode] = useState<'replace' | 'append'>('replace');
   const [error, setError] = useState('');
   const input = useRef<HTMLInputElement>(null);
+  const root = useRef<HTMLElement>(null);
   const usage = analysis.usage;
 
   const load = async (file: File) => {
@@ -30,9 +31,11 @@ export function UsageImportPanel({ incoming, onConsumed }: { incoming: File | nu
       const table = await readUsageTable(file.name, await file.arrayBuffer());
       setRaw(table);
       setMapping(detectMapping(table.headers));
+      setTimeout(() => root.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
     } catch (e) {
       setRaw(null);
       setError(e instanceof Error ? e.message : 'The file could not be read.');
+      setTimeout(() => root.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
     }
   };
 
@@ -57,6 +60,7 @@ export function UsageImportPanel({ incoming, onConsumed }: { incoming: File | nu
     const merged = mergeUsage(model, raw, mapping, extraction, mode);
     updateModel((m) => ({ ...m, ...merged }));
     setRaw(null);
+    onImported?.();
   };
 
   const removeUsage = () => {
@@ -66,7 +70,7 @@ export function UsageImportPanel({ incoming, onConsumed }: { incoming: File | nu
     updateModel((m) => ({ ...m, usageMeta: { imports: m.usageMeta?.imports ?? [], reportFilter: report || undefined } }));
 
   return (
-    <section className="card p-4" aria-label="Usage metrics import">
+    <section ref={root} className="card p-4" aria-label="Usage metrics import">
       <div className="mb-1 flex items-center justify-between gap-2">
         <h2 className="font-semibold">Import usage metrics</h2>
         <button className="btn" onClick={() => input.current?.click()}><FileSpreadsheet size={14} /> Choose CSV / Excel</button>

@@ -23,12 +23,12 @@ export const USAGE_FIELD_LABELS: Record<UsageField, string> = {
 
 /** Known header variants per logical field. Matching ignores case, spaces and punctuation. */
 export const USAGE_COLUMN_ALIASES: Record<UsageField, string[]> = {
-  report: ['Report', 'Report name', 'ReportName', 'Bericht', 'Berichtsname'],
-  page: ['Page', 'Page name', 'PageName', 'Report page', 'ReportPage', 'Seite', 'Seitenname'],
+  report: ['Report', 'Report name', 'ReportName', 'Report title', 'Bericht', 'Berichtsname', 'Berichtstitel'],
+  page: ['Page', 'Page name', 'PageName', 'Page title', 'Report page', 'ReportPage', 'Report page name', 'Seite', 'Seitenname', 'Seitentitel'],
   pageId: ['Page ID', 'PageId', 'Page key', 'Section', 'Section ID', 'SectionId', 'Seiten-ID', 'SeitenId'],
-  views: ['Views', 'View count', 'ViewCount', 'Report views', 'Page views', 'Aufrufe', 'Ansichten'],
-  uniqueUsers: ['Unique users', 'UniqueUsers', 'Viewers', 'Users', 'Benutzer', 'Eindeutige Benutzer'],
-  date: ['Date', 'Activity date', 'ActivityDate', 'Datum'],
+  views: ['Views', 'View count', 'ViewCount', 'Total views', 'Number of views', 'Report views', 'Page views', 'Aufrufe', 'Anzahl Aufrufe', 'Seitenaufrufe', 'Ansichten'],
+  uniqueUsers: ['Unique users', 'UniqueUsers', 'Unique viewers', 'Viewers', 'Users', 'Benutzer', 'Eindeutige Benutzer', 'Eindeutige Betrachter'],
+  date: ['Date', 'Activity date', 'ActivityDate', 'Report date', 'Day', 'Datum', 'Tag'],
 };
 
 export const normalizeHeader = (s: string): string => s.normalize('NFC').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '');
@@ -47,6 +47,20 @@ export function detectMapping(headers: string[]): UsageMapping {
         break;
       }
     }
+  }
+  // Conservative fallback for the two required fields: a single unmatched header that clearly says "page" / "views"
+  const free = (i: number) => !taken.has(i);
+  const only = (test: (h: string) => boolean): number => {
+    const hits = headers.map((h, i) => (free(i) && test(normalizeHeader(h)) ? i : -1)).filter((i) => i !== -1);
+    return hits.length === 1 ? hits[0] : -1;
+  };
+  if (mapping.views === undefined) {
+    const i = only((h) => /(view|aufruf|ansicht)/.test(h) && !/(unique|user|viewer|benutzer|betrachter)/.test(h));
+    if (i !== -1) { mapping.views = headers[i]; taken.add(i); }
+  }
+  if (mapping.page === undefined) {
+    const i = only((h) => /(page|seite)/.test(h) && !/(view|aufruf|ansicht|id$|key)/.test(h));
+    if (i !== -1) { mapping.page = headers[i]; taken.add(i); }
   }
   return mapping;
 }
@@ -127,6 +141,14 @@ function splitHeader(matrix: UsageCell[][]): { headers: string[]; rows: UsageCel
 
 export type UsageFileData = string | ArrayBuffer | Uint8Array;
 
+/** Decodes CSV bytes: UTF-8 (with/without BOM) and UTF-16 with BOM ("Unicode text" from Excel). */
+export function decodeCsvBytes(data: ArrayBuffer | Uint8Array): string {
+  const bytes = data instanceof Uint8Array ? data : new Uint8Array(data);
+  if (bytes[0] === 0xff && bytes[1] === 0xfe) return new TextDecoder('utf-16le').decode(bytes.subarray(2));
+  if (bytes[0] === 0xfe && bytes[1] === 0xff) return new TextDecoder('utf-16be').decode(bytes.subarray(2));
+  return new TextDecoder('utf-8').decode(bytes);
+}
+
 /** Reads a CSV or Excel file into a raw table. Throws an Error with a readable message on unreadable input. */
 export async function readUsageTable(fileName: string, data: UsageFileData): Promise<RawTable> {
   const extMatch = /\.(csv|xlsx|xls)$/i.exec(fileName);
@@ -134,7 +156,7 @@ export async function readUsageTable(fileName: string, data: UsageFileData): Pro
   if (ext !== 'csv' && ext !== 'xlsx' && ext !== 'xls') throw new Error('Unsupported file type – use CSV, XLSX or XLS.');
 
   if (ext === 'csv') {
-    const text = typeof data === 'string' ? data : new TextDecoder('utf-8').decode(data);
+    const text = typeof data === 'string' ? data : decodeCsvBytes(data);
     const { headers, rows } = splitHeader(parseCsv(text));
     if (!headers.length) throw new Error('The file contains no data.');
     return { fileName, format: 'csv', headers, rows };

@@ -7,7 +7,7 @@ import {
 } from './projectStore';
 import type { AnalysisResult, MeasureId, ReportModel, UsageLevel, UsageStatus, VisualCategory } from '../types/powerbi';
 
-export type View = 'dashboard' | 'measures' | 'dependencies' | 'unused' | 'visuals' | 'tables' | 'projects' | 'import' | 'settings';
+export type View = 'dashboard' | 'measures' | 'dependencies' | 'unused' | 'visuals' | 'tables' | 'usage' | 'projects' | 'import' | 'settings';
 export type SaveStatus = 'none' | 'saving' | 'saved' | 'error';
 export type Theme = 'light' | 'dark';
 
