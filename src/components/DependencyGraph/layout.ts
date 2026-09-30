@@ -5,6 +5,7 @@ export const NODE_SIZE: Record<GKind, { w: number; h: number }> = {
   measure: { w: 210, h: 58 },
   visual: { w: 210, h: 58 },
   page: { w: 190, h: 40 },
+  param: { w: 210, h: 58 },
   more: { w: 190, h: 36 },
 };
 

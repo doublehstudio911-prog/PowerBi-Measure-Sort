@@ -33,8 +33,8 @@ export function resolveVisuals(
   model: ReportModel,
   idx: ModelIndex,
   warnings: AnalysisWarning[],
-): Map<string, Omit<VisualInfo, 'reachableMeasures'>> {
-  const out = new Map<string, Omit<VisualInfo, 'reachableMeasures'>>();
+): Map<string, Omit<VisualInfo, 'reachableMeasures' | 'fieldParameters'>> {
+  const out = new Map<string, Omit<VisualInfo, 'reachableMeasures' | 'fieldParameters'>>();
   model.visuals.forEach((v, n) => {
     const id = v.id || `${v.page}/${v.name}#${n}`;
     const measures = new Set<MeasureId>();
@@ -65,6 +65,7 @@ export function resolveVisuals(
     out.set(id, {
       id,
       page: v.page,
+      pageId: v.pageId,
       name: v.name,
       type: v.type,
       category: categorizeVisualType(v.type),

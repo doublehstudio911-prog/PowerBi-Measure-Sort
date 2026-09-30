@@ -1,5 +1,6 @@
 import type { ReportModel } from '../types/powerbi';
 import { PROJECT_FORMAT } from '../state/projectStore';
+import { normalizeModel } from '../state/normalizeModel';
 import { normalizeTables, normalizeVisuals } from './nativeJson';
 import type { ImportResult, ImportSource, ReportImporter } from './types';
 
@@ -15,7 +16,10 @@ export const projectFileImporter: ReportImporter = {
   parse(src): ImportResult {
     const root = src.json as Obj;
     const m = root.model as Obj;
-    const model: ReportModel = { name: typeof root.name === 'string' ? root.name : undefined, tables: normalizeTables(m.tables), visuals: normalizeVisuals(m) };
-    return { model, notes: [`${model.tables.length} tables, ${model.visuals.length} visuals`] };
+    const base: ReportModel = { name: typeof root.name === 'string' ? root.name : undefined, tables: normalizeTables(m.tables), visuals: normalizeVisuals(m) };
+    // usage metrics + import metadata travel with the project file (backup / move to another browser)
+    const model = normalizeModel({ ...base, usageMetrics: m.usageMetrics, usageMeta: m.usageMeta });
+    const usage = model.usageMetrics?.length ? `, ${model.usageMetrics.length} usage rows` : '';
+    return { model, notes: [`${model.tables.length} tables, ${model.visuals.length} visuals${usage}`] };
   },
 };

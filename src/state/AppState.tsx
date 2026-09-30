@@ -1,10 +1,11 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { analyzeModel } from '../engine';
 import { demoModel } from '../data/demoData';
+import { normalizeModel } from './normalizeModel';
 import {
   deleteProject, listProjects, loadProject, newId, renameProject as renameInStore, requestPersistence, saveProject, type ProjectMeta,
 } from './projectStore';
-import type { AnalysisResult, MeasureId, ReportModel, UsageStatus, VisualCategory } from '../types/powerbi';
+import type { AnalysisResult, MeasureId, ReportModel, UsageLevel, UsageStatus, VisualCategory } from '../types/powerbi';
 
 export type View = 'dashboard' | 'measures' | 'dependencies' | 'unused' | 'visuals' | 'tables' | 'projects' | 'import' | 'settings';
 export type SaveStatus = 'none' | 'saving' | 'saved' | 'error';
@@ -15,8 +16,9 @@ export interface Filters {
   table: string;
   page: string;
   visualType: '' | VisualCategory;
+  usageLevel: '' | UsageLevel;
 }
-export const DEFAULT_FILTERS: Filters = { status: 'all', table: '', page: '', visualType: '' };
+export const DEFAULT_FILTERS: Filters = { status: 'all', table: '', page: '', visualType: '', usageLevel: '' };
 
 interface AppState {
   model: ReportModel;
@@ -55,6 +57,8 @@ interface AppState {
 
 const Ctx = createContext<AppState | null>(null);
 const CURRENT_KEY = 'pbi-analyzer:current-project';
+/** First app version kept the model in localStorage – migrated to a saved project once. */
+const LEGACY_MODEL_KEY = 'pbi-analyzer:model:v1';
 const THEME_KEY = 'pbi-analyzer:theme';
 
 function loadTheme(): Theme {
@@ -109,6 +113,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
           setModelState(p.model);
           setCurrentProject({ id: p.id, name: p.name });
           setSaveStatus('saved');
+        } else {
+          const legacy = localStorage.getItem(LEGACY_MODEL_KEY);
+          if (legacy) {
+            const migrated = normalizeModel(JSON.parse(legacy));
+            if (migrated.tables.length || migrated.visuals.length) {
+              const project = { id: newId(), name: migrated.name || 'Migrated model' };
+              await saveProject({ ...project, model: migrated });
+              localStorage.removeItem(LEGACY_MODEL_KEY);
+              persistedModel.current = migrated;
+              setModelState(migrated);
+              setCurrentProject(project);
+              localStorage.setItem(CURRENT_KEY, project.id);
+              setSaveStatus('saved');
+              await refreshProjects();
+            }
+          }
         }
       } catch { /* start with demo data */ }
       setReady(true);

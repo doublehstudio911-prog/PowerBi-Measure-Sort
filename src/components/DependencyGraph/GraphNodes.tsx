@@ -1,5 +1,5 @@
 import { Handle, Position, type NodeProps, type Node } from '@xyflow/react';
-import { AlertTriangle, BarChart3, FileText } from 'lucide-react';
+import { AlertTriangle, BarChart3, FileText, ListChecks } from 'lucide-react';
 import type { GNode } from './buildGraph';
 
 export type FlowData = Node<{ g: GNode; dim: boolean; hi: boolean; selected: boolean; focus: boolean }>;
@@ -57,8 +57,23 @@ function PageNode({ data }: NodeProps<FlowData>) {
   );
 }
 
+function ParamNode({ data }: NodeProps<FlowData>) {
+  const { g, dim } = data;
+  return (
+    <div
+      className={`w-[210px] rounded-xl border-2 ${g.used ? 'border-fuchsia-500' : 'border-dashed border-fuchsia-400'} bg-fuchsia-50 px-3 py-2 text-fuchsia-950 dark:bg-fuchsia-950/50 dark:text-fuchsia-50 ${dim ? 'opacity-25' : ''}`}
+      title={g.used ? 'Field parameter used by a visual' : 'Field parameter not used by any visual – keeps nothing alive'}
+    >
+      <Handle type="target" position={Position.Top} style={handle} />
+      <div className="flex items-center gap-1.5 text-sm font-semibold"><ListChecks size={13} /><span className="truncate">{g.label}</span></div>
+      <div className="text-[11px] opacity-70">{g.used ? 'Field parameter' : 'Field parameter · unused'}</div>
+      <Handle type="source" position={Position.Bottom} style={handle} />
+    </div>
+  );
+}
+
 function MoreNode({ data }: NodeProps<FlowData>) {
   return <div className="w-[190px] rounded-lg border border-dashed border-slate-400 px-3 py-1.5 text-center text-xs text-slate-500">{data.g.label}</div>;
 }
 
-export const nodeTypes = { measure: MeasureNode, visual: VisualNode, page: PageNode, more: MoreNode };
+export const nodeTypes = { measure: MeasureNode, visual: VisualNode, page: PageNode, param: ParamNode, more: MoreNode };

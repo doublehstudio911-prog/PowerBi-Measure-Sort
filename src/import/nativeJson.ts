@@ -1,4 +1,5 @@
 import type { Column, Measure, ReportModel, Table, Visual } from '../types/powerbi';
+import { formatFieldRef } from './pbiFields';
 import type { ImportResult, ImportSource, ReportImporter } from './types';
 
 type Obj = Record<string, unknown>;
@@ -11,7 +12,7 @@ function refToString(x: unknown): string {
   if (isObj(x)) {
     const name = str(x.name ?? x.measure ?? x.column ?? x.field ?? x.property);
     const table = str(x.table ?? x.entity);
-    return table ? `${table}[${name}]` : name;
+    return table ? formatFieldRef(table, name) : name;
   }
   return '';
 }
@@ -40,6 +41,21 @@ function normalizeMeasure(m: unknown): Measure | null {
   };
 }
 
+const withDax = (dax: string | undefined) => (dax ? { dax } : {});
+
+/** Calculated-table DAX: `dax` / `expression`, or a TMSL partition with source.type "calculated". */
+function calculatedTableDax(t: Obj): string | undefined {
+  const direct = daxText(t.dax ?? t.expression);
+  if (direct) return direct;
+  for (const p of Array.isArray(t.partitions) ? t.partitions : []) {
+    if (isObj(p) && isObj(p.source) && str(p.source.type).toLowerCase() === 'calculated') {
+      const dax = daxText(p.source.expression);
+      if (dax) return dax;
+    }
+  }
+  return undefined;
+}
+
 export function normalizeTables(tables: unknown): Table[] {
   if (!Array.isArray(tables)) return [];
   const out: Table[] = [];
@@ -47,6 +63,7 @@ export function normalizeTables(tables: unknown): Table[] {
     if (!isObj(t) || !str(t.name)) continue;
     out.push({
       name: str(t.name),
+      ...withDax(calculatedTableDax(t)),
       measures: (Array.isArray(t.measures) ? t.measures : []).map(normalizeMeasure).filter((x): x is Measure => !!x),
       columns: (Array.isArray(t.columns) ? t.columns : []).map(normalizeColumn).filter((x): x is Column => !!x),
     });
@@ -61,6 +78,7 @@ function normalizeVisual(v: unknown, page: string | undefined, n: number): Visua
   return {
     id: str(v.id) || `${p}/${name}#${n}`,
     page: p,
+    pageId: str(v.pageId) || undefined,
     name,
     type: str(v.type ?? v.visualType) || 'Other',
     measures: refList(v.measures),

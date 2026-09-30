@@ -1,65 +1,86 @@
 import { useState } from 'react';
 import { useApp } from '../../state/AppState';
 import type { MeasureInfo } from '../../types/powerbi';
-import { CycleBadge, EmptyState, StatusBadge } from '../common/ui';
+import { sortMeasures, type SortKey, type SortState } from '../../utils/measureSort';
+import { CycleBadge, EmptyState, FieldParameterBadge, StatusBadge, UsageLevelBadge } from '../common/ui';
 
 const PAGE = 200;
+const fmt = (n: number) => n.toLocaleString('en-US');
 
-export function MeasureTable({ measures, variant = 'all' }: { measures: MeasureInfo[]; variant?: 'all' | 'unused' }) {
-  const { selectMeasure, selected } = useApp();
+export function MeasureTable({ measures, variant = 'all', sort: controlledSort, onSortChange }: {
+  measures: MeasureInfo[];
+  variant?: 'all' | 'unused';
+  sort?: SortState;
+  onSortChange?: (s: SortState) => void;
+}) {
+  const { selectMeasure, selected, analysis } = useApp();
   const [limit, setLimit] = useState(PAGE);
-  const [sort, setSort] = useState<{ key: 'name' | 'table' | 'refs' | 'direct'; dir: 1 | -1 }>({ key: 'name', dir: 1 });
+  const [localSort, setLocalSort] = useState<SortState>({ key: 'name', dir: 1 });
+  const sort = controlledSort ?? localSort;
+  const setSort = onSortChange ?? setLocalSort;
+  const hasUsage = analysis.usage.hasData;
 
-  const sorted = [...measures].sort((a, b) => {
-    const v = sort.key === 'name' ? a.name.localeCompare(b.name) : sort.key === 'table' ? a.table.localeCompare(b.table)
-      : sort.key === 'refs' ? a.usedByMeasures.length - b.usedByMeasures.length : a.directVisuals.length - b.directVisuals.length;
-    return v * sort.dir;
-  });
-  const th = (key: typeof sort.key, label: string) => (
-    <th className="th cursor-pointer select-none" onClick={() => setSort((s) => ({ key, dir: s.key === key ? (-s.dir as 1 | -1) : 1 }))}>
+  const sorted = sortMeasures(analysis, measures, sort);
+  const th = (key: SortKey, label: string, title?: string) => (
+    <th className="th cursor-pointer select-none" title={title} onClick={() => setSort({ key, dir: sort.key === key ? (-sort.dir as 1 | -1) : key === 'name' || key === 'table' ? 1 : -1 })}>
       {label}{sort.key === key ? (sort.dir === 1 ? ' ▲' : ' ▼') : ''}
     </th>
   );
 
   if (!measures.length) return <EmptyState title="No measures match" hint="Adjust the search or filters." />;
+  const full = variant === 'all';
   return (
     <div>
       <div className="overflow-auto">
-        <table className="w-full min-w-[820px] border-collapse">
+        <table className={`w-full border-collapse ${full ? 'min-w-[1100px]' : 'min-w-[820px]'}`}>
           <thead>
             <tr>
               {th('name', 'Measure')}{th('table', 'Table')}
-              {variant === 'all' && <th className="th">Status</th>}
-              {variant === 'unused' && <th className="th">DAX</th>}
-              {variant === 'unused' && <th className="th">Last change</th>}
-              {th('direct', 'Direct')}
-              <th className="th">Indirect</th>
-              {th('refs', 'References')}
-              {variant === 'all' && <th className="th">Depends on</th>}
+              {full && th('status', 'Technical', 'Technical status: DIRECT / INDIRECT / UNUSED')}
+              {full && hasUsage && th('usage', 'Usage', 'Observed usage class derived from page views (relative to all measures)')}
+              {!full && <th className="th">DAX</th>}
+              {!full && <th className="th">Last change</th>}
+              {th('direct', 'Direct visuals', 'Visuals referencing the measure directly')}
+              {full && th('indirect', 'Indirect visuals', 'Visuals reaching the measure through other measures')}
+              {full && th('fp', 'Param. visuals', 'Visuals offering the measure through a used field parameter')}
+              {full && hasUsage && th('pot', 'Potential views', 'Page views of all distinct pages where the measure is reachable (estimate, not DAX executions)')}
+              {full && hasUsage && th('dpot', 'Direct views', 'Page views of pages with a visual referencing the measure directly')}
+              {full && hasUsage && th('ipot', 'Indirect views', 'Page views of pages where the measure is reachable only via other measures')}
+              {full && hasUsage && th('ppot', 'Param. candidate views', 'Page views of pages where the measure is selectable via a field parameter – candidate, not actual selection')}
+              {th('refs', 'References', 'Measures referencing this measure (used or not)')}
+              {!full && <th className="th">Indirect</th>}
             </tr>
           </thead>
           <tbody>
-            {sorted.slice(0, limit).map((m) => (
-              <tr
-                key={m.id}
-                onClick={() => selectMeasure(m.id)}
-                className={`cursor-pointer hover:bg-blue-50/60 dark:hover:bg-slate-800/60 ${selected === m.id ? 'bg-blue-50 dark:bg-slate-800' : ''}`}
-              >
-                <td className="td font-medium text-slate-900 dark:text-white">
-                  {m.name} {m.inCycle && <CycleBadge />}
-                </td>
-                <td className="td text-slate-500">{m.table}</td>
-                {variant === 'all' && <td className="td"><StatusBadge status={m.status} alsoIndirect={m.isDirect && m.isIndirect} /></td>}
-                {variant === 'unused' && (
-                  <td className="td max-w-md"><code className="line-clamp-2 whitespace-pre-wrap font-mono text-xs text-slate-600 dark:text-slate-400">{m.dax}</code></td>
-                )}
-                {variant === 'unused' && <td className="td whitespace-nowrap text-slate-500">{m.lastModified ?? '—'}</td>}
-                <td className="td tabular-nums" title="Visuals using the measure directly">{m.directVisuals.length}</td>
-                <td className="td tabular-nums" title="Used measures referencing this measure">{m.indirectMeasureUsages}</td>
-                <td className="td tabular-nums" title="Measures referencing this measure (used or not)">{m.usedByMeasures.length}</td>
-                {variant === 'all' && <td className="td tabular-nums">{m.dependsOn.length}</td>}
-              </tr>
-            ))}
+            {sorted.slice(0, limit).map((m) => {
+              const u = analysis.usage.measures.get(m.id);
+              return (
+                <tr
+                  key={m.id}
+                  onClick={() => selectMeasure(m.id)}
+                  className={`cursor-pointer hover:bg-blue-50/60 dark:hover:bg-slate-800/60 ${selected === m.id ? 'bg-blue-50 dark:bg-slate-800' : ''}`}
+                >
+                  <td className="td font-medium text-slate-900 dark:text-white">
+                    <span className="mr-1">{m.name}</span>
+                    {m.inCycle && <CycleBadge />} {m.fieldParameters.length > 0 && <FieldParameterBadge />}
+                  </td>
+                  <td className="td text-slate-500">{m.table}</td>
+                  {full && <td className="td"><StatusBadge status={m.status} alsoIndirect={m.isDirect && m.isIndirect} /></td>}
+                  {full && hasUsage && <td className="td">{u && <UsageLevelBadge level={u.usageStatus} />}</td>}
+                  {!full && <td className="td max-w-md"><code className="line-clamp-2 whitespace-pre-wrap font-mono text-xs text-slate-600 dark:text-slate-400">{m.dax}</code></td>}
+                  {!full && <td className="td whitespace-nowrap text-slate-500">{m.lastModified ?? '—'}</td>}
+                  <td className="td tabular-nums">{m.directVisuals.length}</td>
+                  {full && <td className="td tabular-nums">{m.indirectVisuals.length}</td>}
+                  {full && <td className="td tabular-nums">{m.fieldParameterVisuals.length}</td>}
+                  {full && hasUsage && <td className="td tabular-nums font-medium">{fmt(u?.pageViewsPotential ?? 0)}</td>}
+                  {full && hasUsage && <td className="td tabular-nums">{fmt(u?.directPageViewsPotential ?? 0)}</td>}
+                  {full && hasUsage && <td className="td tabular-nums">{fmt(u?.indirectPageViewsPotential ?? 0)}</td>}
+                  {full && hasUsage && <td className="td tabular-nums">{fmt(u?.parameterCandidateViews ?? 0)}</td>}
+                  <td className="td tabular-nums">{m.usedByMeasures.length}</td>
+                  {!full && <td className="td tabular-nums" title="Used measures referencing this measure">{m.indirectMeasureUsages}</td>}
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>

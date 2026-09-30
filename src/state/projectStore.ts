@@ -1,4 +1,5 @@
 import type { ReportModel } from '../types/powerbi';
+import { normalizeModel } from './normalizeModel';
 
 /**
  * Local project library on top of IndexedDB (no size problems like localStorage, survives
@@ -40,7 +41,12 @@ const done = (tx: IDBTransaction) => new Promise<void>((res, rej) => { tx.oncomp
 export const newId = () => `p_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
 
 export function statsOf(model: ReportModel) {
-  return { tables: model.tables.length, measures: model.tables.reduce((a, t) => a + t.measures.length, 0), visuals: model.visuals.length };
+  // defensive: tolerates models saved by older versions
+  return {
+    tables: model.tables?.length ?? 0,
+    measures: (model.tables ?? []).reduce((a, t) => a + (t.measures?.length ?? 0), 0),
+    visuals: model.visuals?.length ?? 0,
+  };
 }
 
 export async function listProjects(): Promise<ProjectMeta[]> {
@@ -53,7 +59,8 @@ export async function loadProject(id: string): Promise<Project | undefined> {
   const d = await db();
   const tx = d.transaction([META, MODELS]);
   const [meta, model] = await Promise.all([wrap<ProjectMeta | undefined>(tx.objectStore(META).get(id)), wrap<ReportModel | undefined>(tx.objectStore(MODELS).get(id))]);
-  return meta && model ? { ...meta, model } : undefined;
+  // older saved versions lack newer optional fields → normalise on load
+  return meta && model ? { ...meta, model: normalizeModel(model) } : undefined;
 }
 
 /** Creates or updates. `createdAt` is preserved for existing projects. */

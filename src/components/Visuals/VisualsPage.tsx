@@ -3,7 +3,7 @@ import { Pencil, Plus, Trash2 } from 'lucide-react';
 import { useApp } from '../../state/AppState';
 import { VISUAL_CATEGORIES } from '../../engine';
 import type { Visual } from '../../types/powerbi';
-import { EmptyState, PageHeader, Select } from '../common/ui';
+import { EmptyState, FieldParameterBadge, PageHeader, Select, UsageDisclaimer } from '../common/ui';
 import { VisualForm } from './VisualForm';
 
 export function VisualsPage() {
@@ -35,6 +35,7 @@ export function VisualsPage() {
         subtitle={`${rows.length} of ${analysis.summary.visuals} visuals on ${analysis.summary.pages} pages`}
         actions={<button className="btn btn-primary" onClick={() => setEditing('new')}><Plus size={14} /> Add visual</button>}
       />
+      {analysis.usage.hasData && <UsageDisclaimer className="mb-3" />}
       {editing === 'new' && <div className="mb-4"><VisualForm onSave={save} onCancel={() => setEditing(null)} /></div>}
       <div className="card">
         <div className="flex flex-wrap gap-2 border-b border-slate-200 p-3 dark:border-slate-800">
@@ -44,12 +45,12 @@ export function VisualsPage() {
         {rows.length === 0 ? <EmptyState title="No visuals" hint="Add visuals manually or import a report layout." /> : (
           <div className="overflow-auto">
             <table className="w-full min-w-[820px] border-collapse">
-              <thead><tr><th className="th">Page</th><th className="th">Visual</th><th className="th">Type</th><th className="th">Measures</th><th className="th">Columns</th><th className="th">Reaches</th><th className="th" /></tr></thead>
+              <thead><tr><th className="th">Page</th><th className="th">Visual</th><th className="th">Type</th><th className="th">Measures</th><th className="th">Columns</th><th className="th">Field parameters</th>{analysis.usage.hasData && <th className="th" title="Views of the report page this visual is on (page level, not per visual)">Page views</th>}<th className="th" title="Measures reachable from this visual: direct, field-parameter members and their dependencies">Reaches</th><th className="th" /></tr></thead>
               <tbody>
                 {rows.map((v) => (
                   <tr key={v.id}>
                     {editing === v.id ? (
-                      <td className="td" colSpan={7}>
+                      <td className="td" colSpan={9}>
                         <VisualForm initial={modelVisual(v.id) ? { ...modelVisual(v.id)!, id: v.id } : undefined} onSave={save} onCancel={() => setEditing(null)} />
                       </td>
                     ) : (
@@ -66,6 +67,12 @@ export function VisualsPage() {
                           </div>
                         </td>
                         <td className="td text-xs text-slate-500">{v.columns.map((c) => `${c.table}[${c.column}]`).join(', ')}</td>
+                        <td className="td">
+                          <div className="flex flex-wrap gap-1">
+                            {v.fieldParameters.map((f) => <span key={f} className="inline-flex items-center gap-1"><FieldParameterBadge /><span className="text-xs">{analysis.fieldParameters.get(f)?.name}</span></span>)}
+                          </div>
+                        </td>
+                        {analysis.usage.hasData && <td className="td tabular-nums text-slate-500">{(analysis.usage.visualPageViews.get(v.id) ?? 0).toLocaleString('en-US')}</td>}
                         <td className="td tabular-nums text-slate-500" title="Measures reachable from this visual, incl. dependencies">{v.reachableMeasures.length}</td>
                         <td className="td whitespace-nowrap text-right">
                           <button className="btn px-2" aria-label="Edit visual" onClick={() => setEditing(v.id)}><Pencil size={13} /></button>{' '}

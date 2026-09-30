@@ -147,6 +147,40 @@ export interface CalculatedColumnDeps {
   deps: ExpressionDeps;
 }
 
+/** A calculated table whose DAX lists fields with NAMEOF() – a Power BI field parameter. */
+export interface FieldParameterDeps {
+  /** "fp:<table>" */
+  id: string;
+  table: string;
+  dax: string;
+  measureIds: MeasureId[];
+  columns: ColumnRef[];
+}
+
+export const fieldParameterId = (table: string) => `fp:${table}`;
+
+/**
+ * Resolves the NAMEOF() references of a calculated table. Returns null when the table is not a field
+ * parameter (no calculated DAX, or no NAMEOF reference at all).
+ */
+export function analyzeFieldParameter(idx: ModelIndex, table: string, dax: string | undefined): FieldParameterDeps | null {
+  if (!dax?.trim()) return null;
+  const parsed = parseDax(dax);
+  if (parsed.nameOfRefs.length === 0) return null;
+  const measureIds = new Set<MeasureId>();
+  const columns = new Map<string, ColumnRef>();
+  for (const ref of parsed.nameOfRefs) {
+    const r = resolveRef(idx, ref, table);
+    if (r.kind === 'measure') {
+      measureIds.add(r.id);
+    } else if (r.table) {
+      const canon = idx.tables.get(lc(r.table)) ?? r.table;
+      columns.set(`${canon}[${r.column}]`.toLowerCase(), { table: canon, column: r.column });
+    }
+  }
+  return { id: fieldParameterId(table), table, dax, measureIds: [...measureIds], columns: [...columns.values()] };
+}
+
 export interface DependencyGraph {
   index: ModelIndex;
   /** Stable order: as in the model */
@@ -157,6 +191,7 @@ export interface DependencyGraph {
   /** measure → measures referencing it */
   reverse: Graph;
   calculatedColumns: CalculatedColumnDeps[];
+  fieldParameters: FieldParameterDeps[];
   warnings: AnalysisWarning[];
 }
 
@@ -177,6 +212,12 @@ export function buildDependencyGraph(model: ReportModel): DependencyGraph {
     for (const dep of d.measureIds) reverse.get(dep)!.push(id);
   }
 
+  const fieldParameters: FieldParameterDeps[] = [];
+  for (const t of model.tables) {
+    const fp = analyzeFieldParameter(index, t.name, t.dax);
+    if (fp) fieldParameters.push(fp);
+  }
+
   const calculatedColumns: CalculatedColumnDeps[] = [];
   for (const t of model.tables) {
     for (const c of t.columns ?? []) {
@@ -184,7 +225,7 @@ export function buildDependencyGraph(model: ReportModel): DependencyGraph {
       calculatedColumns.push({ key: `${t.name}[${c.name}]`, table: t.name, column: c, deps: analyzeExpression(index, c.dax, t.name, c.name) });
     }
   }
-  return { index, ids, deps, forward, reverse, calculatedColumns, warnings };
+  return { index, ids, deps, forward, reverse, calculatedColumns, fieldParameters, warnings };
 }
 
 // ───────────────────────── Traversal helpers ─────────────────────────

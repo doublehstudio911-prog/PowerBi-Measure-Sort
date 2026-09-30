@@ -11,6 +11,7 @@ export function filterMeasures(a: AnalysisResult, query: string, f: Filters): Me
     const m = a.measures.get(id)!;
     if (f.status !== 'all' && m.status !== f.status) continue;
     if (f.table && m.table !== f.table) continue;
+    if (f.usageLevel && a.usage.measures.get(id)?.usageStatus !== f.usageLevel) continue;
     if (f.page || f.visualType) {
       const ok = m.allVisuals.some((vid) => {
         const v = a.visuals.get(vid);

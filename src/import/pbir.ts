@@ -22,6 +22,7 @@ export const pbirVisualImporter: ReportImporter = {
     const visual: Visual = {
       id: `${page}/${id}`,
       page,
+      pageId: page,
       name: typeof title === 'string' ? title.replace(/^'|'$/g, '') : `${j.visual.visualType} ${id.slice(0, 6)}`,
       type: String(j.visual.visualType),
       measures: refs.measures,

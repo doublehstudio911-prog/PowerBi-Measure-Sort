@@ -110,6 +110,25 @@ export function parseTmdl(text: string): Table[] {
     }
 
     if (cur && ind === 1) {
+      const part = /^partition\s+(.*)$/i.exec(t);
+      if (part) {
+        // `partition X = calculated` + `source = <DAX>` → calculated table (field parameters live here)
+        const isCalculated = parseNameAndExpr(part[1]).expr.toLowerCase() === 'calculated';
+        let j = i + 1;
+        while (j < lines.length && (!lines[j].trim() || level(lines[j]) > ind)) {
+          const src = /^\s*source\s*=\s*(.*)$/.exec(lines[j]);
+          if (src && level(lines[j]) === ind + 1) {
+            const block = readBlock(lines, j, ind + 1, src[1].trim());
+            if (isCalculated && block.expr) cur.dax = block.expr;
+            j = block.end;
+          } else {
+            j++;
+          }
+        }
+        doc = [];
+        i = j;
+        continue;
+      }
       const m = /^(measure|column)\s+(.*)$/i.exec(t);
       if (m) {
         const { name, expr } = parseNameAndExpr(m[2]);
@@ -141,7 +160,7 @@ export function parseTmdl(text: string): Table[] {
 export const tmdlImporter: ReportImporter = {
   id: 'tmdl',
   label: 'TMDL (PBIP semantic model)',
-  description: 'Tables, columns, measures and calculated columns from .tmdl files (definition/tables/*.tmdl). Select several files or the whole folder.',
+  description: 'Tables, columns, measures, calculated columns and calculated tables (incl. field parameters) from .tmdl files (definition/tables/*.tmdl). Select several files or the whole folder.',
   detect: (src: ImportSource) => /\.tmdl$/i.test(src.fileName),
   parse(src): ImportResult {
     const tables = parseTmdl(src.text).filter((t) => !/^(LocalDateTable_|DateTableTemplate_)/.test(t.name));

@@ -48,20 +48,26 @@ export function mergeModels(...models: ReportModel[]): ReportModel {
   const tables = new Map<string, ReportModel['tables'][number]>();
   const visuals = new Map<string, ReportModel['visuals'][number]>();
   let name: string | undefined;
+  let usageMetrics: ReportModel['usageMetrics'];
+  let usageMeta: ReportModel['usageMeta'];
   for (const m of models) {
     name ??= m.name;
+    // usage data: the last model that carries some wins (imports never silently drop the loaded data)
+    if (m.usageMetrics) usageMetrics = m.usageMetrics;
+    if (m.usageMeta) usageMeta = m.usageMeta;
     for (const t of m.tables) {
       const cur = tables.get(t.name);
       if (!cur) {
         tables.set(t.name, { ...t, measures: [...t.measures], columns: [...t.columns] });
         continue;
       }
+      if (!cur.dax && t.dax) cur.dax = t.dax;
       for (const me of t.measures) if (!cur.measures.some((x) => x.name === me.name)) cur.measures.push(me);
       for (const c of t.columns) if (!cur.columns.some((x) => x.name === c.name)) cur.columns.push(c);
     }
     for (const v of m.visuals) visuals.set(v.id, v);
   }
-  return { name, tables: [...tables.values()], visuals: [...visuals.values()] };
+  return { name, tables: [...tables.values()], visuals: [...visuals.values()], ...(usageMetrics ? { usageMetrics } : {}), ...(usageMeta ? { usageMeta } : {}) };
 }
 
 /** Decodes a file, honouring UTF-8/UTF-16 BOMs (PBIX Layout is UTF-16LE). */
@@ -83,6 +89,6 @@ export function processSources(sources: ImportSource[]): { outcomes: FileImportO
   if (!ok.length) return { outcomes, model: null };
   const pageNames: Record<string, string> = Object.assign({}, ...ok.map((o) => o.result!.pageNames ?? {}));
   const merged = mergeModels(...ok.map((o) => o.result!.model));
-  merged.visuals = merged.visuals.map((v) => (pageNames[v.page] ? { ...v, page: pageNames[v.page] } : v));
+  merged.visuals = merged.visuals.map((v) => (pageNames[v.page] ? { ...v, pageId: v.pageId ?? v.page, page: pageNames[v.page] } : v));
   return { outcomes, model: merged };
 }

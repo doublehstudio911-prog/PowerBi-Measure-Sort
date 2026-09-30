@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { ChevronDown, ChevronRight, Plus, Trash2 } from 'lucide-react';
 import { useApp } from '../../state/AppState';
-import { CycleBadge, EmptyState, PageHeader, StatusBadge } from '../common/ui';
+import { CycleBadge, EmptyState, FieldParameterBadge, PageHeader, StatusBadge } from '../common/ui';
 
 export function TablesPage() {
   const { model, analysis, updateModel, query, selectMeasure } = useApp();
@@ -45,6 +45,7 @@ export function TablesPage() {
                 {isOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
                 <span className="font-semibold text-slate-900 dark:text-white">{t.name}</span>
                 <span className="text-xs text-slate-500">{t.measures.length} measures · {t.columns.length} columns</span>
+                {info?.isFieldParameter && <FieldParameterBadge title="Calculated table listing fields with NAMEOF()" />}
                 {!!info?.unusedMeasureCount && <span className="badge bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-300">{info.unusedMeasureCount} unused</span>}
               </button>
               {isOpen && (
@@ -73,6 +74,25 @@ export function TablesPage() {
                       <NewMeasure onAdd={(name, dax) => patch(t.name, (x) => ({ ...x, measures: [...x.measures, { name, dax }] }))} exists={(n) => analysis.measures.has(`${t.name}[${n}]`)} />
                     </div>
                   </div>
+                  {info?.isFieldParameter && (() => {
+                    const fp = analysis.fieldParameters.get(`fp:${t.name}`);
+                    if (!fp) return null;
+                    return (
+                      <div className="rounded-lg border border-fuchsia-200 p-3 dark:border-fuchsia-500/30">
+                        <h3 className="mb-1 text-sm font-semibold">Field parameter</h3>
+                        <p className="mb-2 text-xs text-slate-500">
+                          {fp.isUsed ? `Used by ${fp.usedByVisuals.map((v) => `${analysis.visuals.get(v)?.page} › ${analysis.visuals.get(v)?.name}`).join(', ')}.` : 'Not used by any visual – its measures are not kept alive by it.'}
+                        </p>
+                        <div className="mb-2 flex flex-wrap gap-1.5">
+                          {fp.measures.map((mid) => (
+                            <button key={mid} className="badge bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300" onClick={() => selectMeasure(mid)}>{analysis.measures.get(mid)?.name ?? mid}</button>
+                          ))}
+                          {fp.columns.map((c) => <span key={`${c.table}[${c.column}]`} className="badge bg-slate-100 text-slate-500 dark:bg-slate-800">{c.table}[{c.column}]</span>)}
+                        </div>
+                        <pre className="code m-0 max-h-40">{fp.dax}</pre>
+                      </div>
+                    );
+                  })()}
                   <div>
                     <h3 className="mb-2 text-sm font-semibold">Columns</h3>
                     <div className="mb-2 flex flex-wrap gap-1.5">

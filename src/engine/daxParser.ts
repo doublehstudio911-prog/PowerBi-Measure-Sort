@@ -28,7 +28,10 @@ export interface DaxRef {
 }
 
 export interface ParsedDax {
+  /** De-duplicated `[Name]` / `Table[Name]` references. Includes the references found inside NAMEOF(). */
   refs: DaxRef[];
+  /** De-duplicated references that appear as argument of NAMEOF() – field parameters list their fields this way */
+  nameOfRefs: DaxRef[];
   /** Names declared with VAR */
   variables: string[];
   /**
@@ -174,11 +177,35 @@ function headerLength(tokens: DaxToken[], selfName?: string): number {
   return 0;
 }
 
+const refKey = (r: DaxRef) => `${(r.table ?? '').trim().toLowerCase()}\u0000${r.name.trim().toLowerCase()}`;
+
+function dedupeRefs(list: DaxRef[]): DaxRef[] {
+  const seen = new Set<string>();
+  return list.filter((r) => {
+    const k = refKey(r);
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+}
+
+/** For `NAMEOF ( <ref> )` at token index `i` (the NAMEOF identifier) returns the referenced field, if well-formed. */
+function readNameOfArgument(tokens: DaxToken[], i: number): DaxRef | null {
+  const open = tokens[i + 1];
+  if (open?.kind !== 'punct' || open.value !== '(') return null;
+  const a = tokens[i + 2];
+  const b = tokens[i + 3];
+  if (a?.kind === 'bracket') return { name: a.value };
+  if ((a?.kind === 'ident' || a?.kind === 'quoted') && b?.kind === 'bracket' && !b.spaceBefore) return { table: a.value, name: b.value };
+  return null;
+}
+
 export function parseDax(dax: string, options: ParseOptions = {}): ParsedDax {
   const tokens = tokenizeDax(dax ?? '');
   const start = headerLength(tokens, options.selfName);
 
   const refs: DaxRef[] = [];
+  const nameOfRefs: DaxRef[] = [];
   const variables: string[] = [];
   const identifiers: string[] = [];
   const functions: string[] = [];
@@ -211,6 +238,10 @@ export function parseDax(dax: string, options: ParseOptions = {}): ParsedDax {
       }
       if (t.kind === 'ident' && next?.kind === 'punct' && next.value === '(') {
         functions.push(t.value.toUpperCase());
+        if (t.value.toUpperCase() === 'NAMEOF') {
+          const arg = readNameOfArgument(tokens, i);
+          if (arg) nameOfRefs.push(arg);
+        }
         continue;
       }
       identifiers.push(t.value);
@@ -218,5 +249,5 @@ export function parseDax(dax: string, options: ParseOptions = {}): ParsedDax {
     // strings, numbers, punctuation: ignored
   }
 
-  return { refs, variables, identifiers, functions };
+  return { refs: dedupeRefs(refs), nameOfRefs: dedupeRefs(nameOfRefs), variables, identifiers, functions };
 }

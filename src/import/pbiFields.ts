@@ -7,6 +7,15 @@
 type Obj = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 const isObj = (x: unknown): x is Obj => typeof x === 'object' && x !== null && !Array.isArray(x);
 
+const SIMPLE_NAME = /^[\p{L}_][\p{L}\p{N}_]*$/u;
+
+/** DAX-style field reference: `Table[Field]`, with quotes for table names that need them ('My Table'[Field]). */
+export function formatFieldRef(table: string | undefined, name: string): string {
+  const field = `[${name.replace(/]/g, ']]')}]`;
+  if (!table) return field;
+  return `${SIMPLE_NAME.test(table) ? table : `'${table.replace(/'/g, "''")}'`}${field}`;
+}
+
 export interface FieldRefs {
   measures: string[];
   columns: string[];
@@ -20,7 +29,7 @@ export function collectFieldRefs(root: unknown, aliases: Map<string, string> = n
     if (typeof f.Property !== 'string') return null;
     const src = f.Expression?.SourceRef;
     const table = src?.Entity ?? (src?.Source ? aliases.get(src.Source) ?? src.Source : '');
-    return table ? `${table}[${f.Property}]` : `[${f.Property}]`;
+    return formatFieldRef(table, f.Property);
   };
 
   const walk = (node: unknown) => {

@@ -123,6 +123,7 @@ function GraphInner() {
           <span><i className="mr-1 inline-block size-3 rounded border-2 border-cyan-500 bg-cyan-100 align-middle" />Indirect</span>
           <span><i className="mr-1 inline-block size-3 rounded border-2 border-dashed border-red-500 bg-red-100 align-middle" />Unused</span>
           <span><i className="mr-1 inline-block size-3 rounded border-2 border-violet-400 bg-violet-100 align-middle" />Visual</span>
+          <span><i className="mr-1 inline-block size-3 rounded border-2 border-fuchsia-500 bg-fuchsia-100 align-middle" />Field parameter</span>
         </div>
       </div>
 
@@ -168,8 +169,9 @@ function GraphInner() {
               <div>
                 <div className="mb-1 text-xs font-semibold uppercase text-slate-500">Used by ({info.usedByMeasures.length + info.directVisuals.length})</div>
                 {info.usedByMeasures.map((d) => <button key={d} className="mr-1 mb-1 badge bg-slate-100 dark:bg-slate-800" onClick={() => openInGraph(d)}>{nameOf(d)}</button>)}
+                {info.fieldParameters.map((f) => <span key={f} className="mr-1 mb-1 badge bg-fuchsia-100 text-fuchsia-700 dark:bg-fuchsia-500/15 dark:text-fuchsia-300">◇ {analysis.fieldParameters.get(f)?.name}</span>)}
                 {info.directVisuals.map((v) => <span key={v} className="mr-1 mb-1 badge bg-violet-100 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300">▣ {analysis.visuals.get(v)?.name}</span>)}
-                {!info.usedByMeasures.length && !info.directVisuals.length && <span className="text-xs text-slate-500">— (unused)</span>}
+                {!info.usedByMeasures.length && !info.directVisuals.length && !info.fieldParameters.length && <span className="text-xs text-slate-500">— (unused)</span>}
               </div>
               {info.reason && (
                 <div>

@@ -1,4 +1,4 @@
-import { ArrowDown, BarChart3, RefreshCcw } from 'lucide-react';
+import { ArrowDown, BarChart3, ListChecks, RefreshCcw } from 'lucide-react';
 import { useApp } from '../../state/AppState';
 import type { TreeNode } from '../../engine';
 import type { AnalysisResult, MeasureId, UsageReason } from '../../types/powerbi';
@@ -43,6 +43,15 @@ export function ReasonPath({ reason, analysis }: { reason: UsageReason; analysis
             <span className="flex items-center gap-1 text-xs text-violet-600 dark:text-violet-300"><BarChart3 size={12} /> Visual · {v.type}</span>
             <div className="font-medium">{v.name}</div>
           </Box>
+          {reason.root.kind === 'visual' && reason.root.fieldParameter && (
+            <>
+              <Arrow />
+              <Box tone="border-fuchsia-300 bg-fuchsia-50 dark:border-fuchsia-500/40 dark:bg-fuchsia-500/10">
+                <span className="flex items-center gap-1 text-xs text-fuchsia-700 dark:text-fuchsia-300"><ListChecks size={12} /> Field Parameter</span>
+                <div className="font-medium">{analysis.fieldParameters.get(reason.root.fieldParameter)?.name ?? reason.root.fieldParameter}</div>
+              </Box>
+            </>
+          )}
         </>
       ) : (
         <Box tone="border-slate-200 dark:border-slate-700"><span className="text-xs text-slate-500">Calculated column</span><div>{reason.root.kind === 'column' ? reason.root.column : ''}</div></Box>

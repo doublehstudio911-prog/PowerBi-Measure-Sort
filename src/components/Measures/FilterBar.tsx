@@ -5,7 +5,7 @@ import { Select } from '../common/ui';
 
 export function FilterBar({ showStatus = true }: { showStatus?: boolean }) {
   const { analysis, filters, setFilters, resetFilters, query, setQuery } = useApp();
-  const dirty = filters.status !== 'all' || filters.table || filters.page || filters.visualType || query;
+  const dirty = filters.usageLevel || filters.status !== 'all' || filters.table || filters.page || filters.visualType || query;
   return (
     <div className="flex flex-wrap items-center gap-2">
       {showStatus && (
@@ -17,6 +17,17 @@ export function FilterBar({ showStatus = true }: { showStatus?: boolean }) {
             { value: 'direct', label: 'Directly used' },
             { value: 'indirect', label: 'Indirectly used' },
             { value: 'unused', label: 'Unused' },
+          ]}
+        />
+      )}
+      {showStatus && analysis.usage.hasData && (
+        <Select
+          value={filters.usageLevel}
+          onChange={(v) => setFilters({ usageLevel: v as typeof filters.usageLevel })}
+          placeholder="Usage: any"
+          options={[
+            { value: 'HIGH', label: 'Usage: HIGH' }, { value: 'MEDIUM', label: 'Usage: MEDIUM' }, { value: 'LOW', label: 'Usage: LOW' },
+            { value: 'NO_OBSERVED_USAGE', label: 'Usage: NO_OBSERVED_USAGE' },
           ]}
         />
       )}

@@ -102,3 +102,78 @@ describe('TMDL', () => {
     expect(a.measures.get('T[Other]')!.status).toBe('unused');
   });
 });
+
+describe('TMDL – field parameters (calculated tables)', () => {
+  const fieldParameter = [
+    "table 'KPI Auswahl'",
+    `${T}lineageTag: 1`,
+    '',
+    `${T}column 'KPI Auswahl'`,
+    `${T}${T}dataType: string`,
+    `${T}${T}sourceColumn: [Value1]`,
+    `${T}${T}sortByColumn: 'KPI Auswahl Order'`,
+    '',
+    `${T}${T}relatedColumnDetails`,
+    `${T}${T}${T}groupByColumn: 'KPI Auswahl Fields'`,
+    '',
+    `${T}column 'KPI Auswahl Fields'`,
+    `${T}${T}isHidden`,
+    `${T}${T}sourceColumn: [Value2]`,
+    `${T}${T}extendedProperty ParameterMetadata =`,
+    `${T}${T}${T}${T}{`,
+    `${T}${T}${T}${T}  "version": 3,`,
+    `${T}${T}${T}${T}  "kind": 2`,
+    `${T}${T}${T}${T}}`,
+    '',
+    `${T}column 'KPI Auswahl Order'`,
+    `${T}${T}isHidden`,
+    `${T}${T}sourceColumn: [Value3]`,
+    '',
+    `${T}partition 'KPI Auswahl' = calculated`,
+    `${T}${T}mode: import`,
+    `${T}${T}source =`,
+    `${T}${T}${T}${T}{`,
+    `${T}${T}${T}${T}${T}("Gesamt", NAMEOF('Measures'[SQ_Gesamt]), 0),`,
+    `${T}${T}${T}${T}${T}("Aufwand", NAMEOF([Aufwand_Gesamt]), 1),`,
+    `${T}${T}${T}${T}${T}("Schaden", NAMEOF(Schaden[Schaden_Aufwand]), 2)`,
+    `${T}${T}${T}${T}}`,
+    '',
+    `${T}annotation PBI_Id = abc`,
+  ].join('\n');
+
+  it('captures the DAX of a calculated table partition', () => {
+    const [t] = parseTmdl(fieldParameter);
+    expect(t.name).toBe('KPI Auswahl');
+    expect(t.columns.map((c) => c.name)).toEqual(['KPI Auswahl', 'KPI Auswahl Fields', 'KPI Auswahl Order']);
+    expect(t.dax).toContain("NAMEOF('Measures'[SQ_Gesamt])");
+    expect(t.dax).toContain('NAMEOF(Schaden[Schaden_Aufwand])');
+    expect(t.dax!.startsWith('{')).toBe(true);
+    expect(t.dax!.endsWith('}')).toBe(true);
+  });
+
+  it('ignores import (Power Query) partitions and keeps measures parsed after the partition', () => {
+    const [t] = parseTmdl(['table Sales', `${T}partition Sales = m`, `${T}${T}mode: import`, `${T}${T}source =`, `${T}${T}${T}${T}let x = 1 in x`, `${T}measure A = 1`].join('\n'));
+    expect(t.dax).toBeUndefined();
+    expect(t.measures.map((m) => m.name)).toEqual(['A']);
+  });
+
+  it('field parameter from TMDL + PBIR keeps measures alive end to end', () => {
+    const measures = ['table Measures', `${T}measure SQ_Gesamt = [Aufwand_Gesamt]`, `${T}measure Aufwand_Gesamt = SUM(Schaden[X])`, `${T}measure Aufwand_Gesamt2 = 1`].join('\n');
+    const visual = JSON.stringify({ name: 'v1', visual: { visualType: 'card', query: { queryState: { Values: { projections: [
+      { field: { Column: { Expression: { SourceRef: { Entity: 'KPI Auswahl' } }, Property: 'KPI Auswahl Fields' } } },
+    ] } } } } });
+    const { model } = processSources([
+      toSource('def/tables/Measures.tmdl', measures),
+      toSource('def/tables/KPI Auswahl.tmdl', fieldParameter),
+      toSource('def/tables/Schaden.tmdl', ['table Schaden', `${T}measure Schaden_Aufwand = 1`].join('\n')),
+      toSource('rep/pages/p1/page.json', JSON.stringify({ name: 'p1', displayName: 'Übersicht' })),
+      toSource('rep/pages/p1/visuals/v1/visual.json', visual),
+    ]);
+    const a = analyzeModel(model!);
+    expect(a.fieldParameters.get('fp:KPI Auswahl')!.measures.sort()).toEqual(['Measures[Aufwand_Gesamt]', 'Measures[SQ_Gesamt]', 'Schaden[Schaden_Aufwand]']);
+    expect(a.measures.get('Measures[SQ_Gesamt]')!.status).toBe('indirect');
+    expect(a.measures.get('Measures[SQ_Gesamt]')!.reason!.root).toMatchObject({ kind: 'visual', fieldParameter: 'fp:KPI Auswahl' });
+    expect(a.measures.get('Measures[Aufwand_Gesamt2]')!.status).toBe('unused');
+    expect(model!.visuals[0]).toMatchObject({ page: 'Übersicht', pageId: 'p1' });
+  });
+});

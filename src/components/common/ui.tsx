@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { AlertTriangle, CircleCheck, CircleDot, CircleOff } from 'lucide-react';
-import type { UsageStatus } from '../../types/powerbi';
+import type { UsageLevel, UsageStatus } from '../../types/powerbi';
+import { USAGE_DISCLAIMER, USAGE_LEVEL_HELP, USAGE_LEVEL_LABEL, USAGE_LEVEL_TOOLTIP } from '../../utils/reasons';
 
 export function StatusBadge({ status, alsoIndirect }: { status: UsageStatus; alsoIndirect?: boolean }) {
   const map = {
@@ -12,6 +13,42 @@ export function StatusBadge({ status, alsoIndirect }: { status: UsageStatus; als
     <span className={`badge ${map.cls}`} title={alsoIndirect ? 'Used directly and also referenced by other used measures' : undefined}>
       <map.Icon size={12} /> {map.label}{alsoIndirect ? ' +' : ''}
     </span>
+  );
+}
+
+const LEVEL_CLASS: Record<UsageLevel, string> = {
+  HIGH: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300',
+  MEDIUM: 'bg-sky-100 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300',
+  LOW: 'bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300',
+  NO_OBSERVED_USAGE: 'bg-slate-200 text-slate-700 dark:bg-slate-700/60 dark:text-slate-300',
+  NO_USAGE_DATA: 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400',
+};
+
+/** Observed-usage class (separate from the technical status). The tooltip explains the classification. */
+export function UsageLevelBadge({ level }: { level: UsageLevel }) {
+  return (
+    <span className={`badge whitespace-nowrap ${LEVEL_CLASS[level]}`} title={`${USAGE_LEVEL_HELP[level]}\n\n${USAGE_LEVEL_TOOLTIP}`}>
+      {level}
+    </span>
+  );
+}
+export { USAGE_LEVEL_LABEL };
+
+export function FieldParameterBadge({ title }: { title?: string }) {
+  return (
+    <span className="badge bg-fuchsia-100 text-fuchsia-700 dark:bg-fuchsia-500/15 dark:text-fuchsia-300" title={title ?? 'Selectable through a field parameter'}>
+      FIELD PARAM
+    </span>
+  );
+}
+
+/** Visible on every screen that shows page-view based numbers. */
+export function UsageDisclaimer({ className = '' }: { className?: string }) {
+  return (
+    <div className={`flex gap-2 rounded-xl border border-sky-200 bg-sky-50 p-3 text-xs text-sky-900 dark:border-sky-500/30 dark:bg-sky-500/10 dark:text-sky-200 ${className}`} role="note">
+      <span aria-hidden>ⓘ</span>
+      <span>{USAGE_DISCLAIMER}</span>
+    </div>
   );
 }
 

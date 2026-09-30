@@ -9,6 +9,8 @@ export interface UsageInput {
   /** visual id → measures used directly */
   visualMeasures: Map<string, MeasureId[]>;
   calculatedColumns: CalculatedColumnDeps[];
+  /** visual id → field parameters the visual uses, with their member measures */
+  visualParameters?: Map<string, { id: string; measures: MeasureId[] }[]>;
 }
 
 export interface UsageResult {
@@ -23,6 +25,10 @@ export interface UsageResult {
   /** number of *used* measures / used calculated columns referencing the measure */
   indirectMeasureUsages: Map<MeasureId, number>;
   isIndirect: Set<MeasureId>;
+  /** visuals offering the measure through a used field parameter (hop 0) */
+  fieldParameterVisuals: Map<MeasureId, string[]>;
+  /** ids of used field parameters containing the measure */
+  fieldParameters: Map<MeasureId, string[]>;
   reasons: Map<MeasureId, UsageReason>;
   /** closure cache: measure → everything reachable via ≥1 edge */
   closure: Map<MeasureId, Set<MeasureId>>;
@@ -30,12 +36,13 @@ export interface UsageResult {
 
 /**
  * Core usage logic:
- *   USED = DIRECT ∪ (everything reachable from DIRECT)      UNUSED = ALL − USED
+ *   USED = DIRECT ∪ FIELD-PARAMETER MEMBERS ∪ (everything reachable from those)      UNUSED = ALL − USED
+ * A field parameter only counts when a visual uses it (Page → Visual → Field Parameter → Measure).
  * Implemented as an iterative BFS with a visited set → terminates on circular dependencies.
  * Shortest paths are recorded so each used measure can explain *why* it is used.
  */
 export function analyzeUsage(input: UsageInput): UsageResult {
-  const { ids, forward, visualMeasures, calculatedColumns } = input;
+  const { ids, forward, visualMeasures, calculatedColumns, visualParameters = new Map() } = input;
   const known = new Set(ids);
 
   const directVisuals = new Map<MeasureId, string[]>();
@@ -48,6 +55,25 @@ export function analyzeUsage(input: UsageInput): UsageResult {
     }
   }
   const directlyUsed = new Set(directVisuals.keys());
+
+  // Field-parameter members: measure → visuals / parameter ids (deterministic order = visual order)
+  const fieldParameterVisuals = new Map<MeasureId, string[]>();
+  const fieldParameters = new Map<MeasureId, string[]>();
+  const parameterStarts: [MeasureId, UsageReason['root']][] = [];
+  for (const [vid, params] of visualParameters) {
+    for (const p of params) {
+      for (const m of p.measures) {
+        if (!known.has(m)) continue;
+        const vs = fieldParameterVisuals.get(m) ?? [];
+        if (!vs.includes(vid)) vs.push(vid);
+        fieldParameterVisuals.set(m, vs);
+        const fps = fieldParameters.get(m) ?? [];
+        if (!fps.includes(p.id)) fps.push(p.id);
+        fieldParameters.set(m, fps);
+        parameterStarts.push([m, { kind: 'visual', visualId: vid, fieldParameter: p.id }]);
+      }
+    }
+  }
 
   const used = new Set<MeasureId>();
   const parent = new Map<MeasureId, MeasureId | null>();
@@ -73,8 +99,9 @@ export function analyzeUsage(input: UsageInput): UsageResult {
     }
   };
 
-  // 1) visuals first so their paths win; 2) calculated columns keep otherwise-orphaned measures alive
+  // 1) direct visual references win, 2) field-parameter members, 3) calculated columns keep otherwise-orphaned measures alive
   bfs([...directVisuals].map(([m, vs]) => [m, { kind: 'visual', visualId: vs[0] }]));
+  bfs(parameterStarts);
   const columnRoots: [MeasureId, UsageReason['root']][] = [];
   for (const cc of calculatedColumns) for (const m of cc.deps.measureIds) columnRoots.push([m, { kind: 'column', column: cc.key }]);
   bfs(columnRoots);
@@ -112,6 +139,15 @@ export function analyzeUsage(input: UsageInput): UsageResult {
     }
   }
 
+  // Members of a used field parameter reach their dependencies exactly like directly used measures
+  for (const [m, vs] of fieldParameterVisuals) {
+    for (const x of closureOf(m)) {
+      let set = indirectVisuals.get(x);
+      if (!set) indirectVisuals.set(x, (set = new Set()));
+      for (const v of vs) set.add(v);
+    }
+  }
+
   const indirectMeasureUsages = new Map<MeasureId, number>();
   const isIndirect = new Set<MeasureId>();
   for (const u of used) {
@@ -136,6 +172,8 @@ export function analyzeUsage(input: UsageInput): UsageResult {
     indirectVisuals,
     indirectMeasureUsages,
     isIndirect,
+    fieldParameterVisuals,
+    fieldParameters,
     reasons,
     closure,
   };

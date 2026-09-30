@@ -5,3 +5,4 @@ export * from './circularDependencyDetector';
 export * from './visualCategory';
 export * from './visualResolver';
 export * from './analyzeModel';
+export * from './usageMetricsResolver';

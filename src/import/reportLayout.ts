@@ -43,6 +43,7 @@ export const reportLayoutImporter: ReportImporter = {
         visuals.push({
           id,
           page,
+          pageId: section.name !== undefined ? String(section.name) : undefined,
           name: typeof title === 'string' ? title.replace(/^'|'$/g, '') : `${sv.visualType ?? 'visual'} ${++n}`,
           type: String(sv.visualType ?? 'Other'),
           measures,

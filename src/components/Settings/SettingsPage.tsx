@@ -1,9 +1,10 @@
 import { useApp } from '../../state/AppState';
+import { withoutUsage } from '../../import/usageMetrics';
 import { PageHeader } from '../common/ui';
 import { ExportMenu } from '../common/ExportMenu';
 
 export function SettingsPage() {
-  const { theme, setTheme, loadDemo, clearModel, analysis } = useApp();
+  const { theme, setTheme, loadDemo, clearModel, analysis, updateModel } = useApp();
   return (
     <>
       <PageHeader title="Settings" />
@@ -18,10 +19,21 @@ export function SettingsPage() {
         </section>
         <section className="card p-5">
           <h2 className="mb-1 font-semibold">Data</h2>
-          <p className="mb-3 text-sm text-slate-500">The model is stored only in this browser (localStorage). Nothing is transmitted to any server.</p>
+          <p className="mb-3 text-sm text-slate-500">Projects (model, usage metrics, column mappings) are stored only in this browser (IndexedDB; only theme and the last opened project id use localStorage). Nothing is transmitted to any server.</p>
           <div className="flex flex-wrap gap-2">
             <button className="btn" onClick={loadDemo}>Load demo data</button>
-            <button className="btn btn-danger" onClick={() => { if (confirm('Remove all tables, measures and visuals?')) clearModel(); }}>Clear model</button>
+            <button
+              className="btn btn-danger" disabled={!analysis.usage.hasData}
+              onClick={() => { if (confirm('Remove all imported usage metrics? Tables, measures and visuals are kept.')) updateModel((m) => withoutUsage(m)); }}
+            >
+              Remove usage metrics
+            </button>
+            <button
+              className="btn btn-danger"
+              onClick={() => { if (confirm('Reset the entire project? Tables, measures, visuals and usage metrics are removed from the working model (saved projects stay untouched).')) clearModel(); }}
+            >
+              Reset entire project
+            </button>
           </div>
         </section>
         <section className="card p-5">

@@ -48,3 +48,44 @@ describe('importers', () => {
     expect(importSource(toSource('x.json', '{"foo":1}')).error).toMatch(/Unknown/);
   });
 });
+
+describe('importers – calculated tables and page ids', () => {
+  it('TMSL/BIM: a calculated-table partition becomes the table DAX', () => {
+    const bim = { model: { tables: [
+      { name: 'P', columns: [{ name: 'P' }], partitions: [{ name: 'P', source: { type: 'calculated', expression: ['{', '  ("a", NAMEOF([A]), 0)', '}'] } }] },
+      { name: 'S', partitions: [{ name: 'S', source: { type: 'm', expression: 'let x = 1 in x' } }], measures: [{ name: 'A', expression: '1' }] },
+    ] } };
+    const out = importSource(toSource('model.bim', JSON.stringify(bim)));
+    const [p, s] = out.result!.model.tables;
+    expect(p.dax).toBe('{\n  ("a", NAMEOF([A]), 0)\n}');
+    expect(s.dax).toBeUndefined();
+    expect('dax' in s).toBe(false);
+  });
+
+  it('native JSON keeps table dax and visual pageId', () => {
+    const json = { tables: [{ name: 'P', dax: '{ ("a", NAMEOF([A]), 0) }' }, { name: 'S', measures: [{ name: 'A', dax: '1' }] }], visuals: [{ page: 'Seite', pageId: 'sec1', name: 'v', type: 'Card', columns: ['P[P]'] }] };
+    const m = importSource(toSource('a.json', JSON.stringify(json))).result!.model;
+    expect(m.tables[0].dax).toBe('{ ("a", NAMEOF([A]), 0) }');
+    expect(m.visuals[0].pageId).toBe('sec1');
+    expect(analyzeModel(m).measures.get('S[A]')!.status).toBe('indirect');
+  });
+
+  it('report layout: section name is the page id, displayName the page', () => {
+    const layout = { sections: [{ name: 'ReportSection7', displayName: 'Übersicht', visualContainers: [
+      { config: JSON.stringify({ name: 'x', singleVisual: { visualType: 'card', prototypeQuery: { From: [{ Name: 's', Entity: 'T' }], Select: [{ Measure: { Expression: { SourceRef: { Source: 's' } }, Property: 'A' } }] } } }) },
+    ] }] };
+    const v = importSource(toSource('Layout', JSON.stringify(layout))).result!.model.visuals[0];
+    expect(v).toMatchObject({ page: 'Übersicht', pageId: 'ReportSection7', measures: ['T[A]'] });
+  });
+});
+
+describe('field reference formatting', () => {
+  it('quotes table names that are not plain identifiers and escapes brackets/quotes', async () => {
+    const { formatFieldRef } = await import('./pbiFields');
+    expect(formatFieldRef('Sales', 'Revenue')).toBe('Sales[Revenue]');
+    expect(formatFieldRef('KPI Auswahl', 'KPI Auswahl')).toBe("'KPI Auswahl'[KPI Auswahl]");
+    expect(formatFieldRef("It's", 'A')).toBe("'It''s'[A]");
+    expect(formatFieldRef('Größe', 'A')).toBe('Größe[A]');
+    expect(formatFieldRef(undefined, 'A]B')).toBe('[A]]B]');
+  });
+});

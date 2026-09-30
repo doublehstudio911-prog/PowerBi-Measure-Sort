@@ -1,12 +1,16 @@
 import type { ReportModel } from '../types/powerbi';
 
 /**
- * Demo model: 10 measures, 7 used (2 directly via visuals, the rest through dependency chains),
- * 3 deliberately unused. Also demonstrates cross-table references, VARs and column-vs-measure names.
+ * Demo model: 10 measures, 7 used, 3 deliberately unused – plus field parameters and usage metrics.
  *
- *   SQ KPI  → SQ_Gesamt → Aufwand_Gesamt → Schaden_Aufwand
- *                       ↘ ABGP_Gesamt
- *   JNP KPI → JNP → ABGP_Gesamt, Vertrag_Aktiv
+ *   Schadenübersicht  → SQ KPI → SQ_Gesamt → Aufwand_Gesamt → Schaden_Aufwand
+ *                                          ↘ ABGP_Gesamt
+ *   Vertragsübersicht → Kennzahl Slicer/Chart → Field Parameter "Kennzahl Auswahl"
+ *                                          → Schadenzahl · ABGP_Gesamt · Vertrag_Aktiv   (only used via the parameter)
+ *   Archiv            → JNP KPI → JNP → ABGP_Gesamt, Vertrag_Aktiv                        (page has 0 observed views)
+ *
+ *   Field parameter "Alt Auswahl" (Test_Measure, Debug_Measure) is used by no visual → keeps nothing alive.
+ *   Usage rows: three pages with views, one page without views, one unknown page, one row of another report.
  */
 export const demoModel: ReportModel = {
   name: 'Demo – Schaden & Vertrag',
@@ -58,13 +62,56 @@ export const demoModel: ReportModel = {
         { name: 'Vertrag_Aktiv', dax: "CALCULATE(DISTINCTCOUNT(Contracts[Vertrag_ID]), Contracts[Status] = \"Aktiv\")", lastModified: '2025-02-10' },
       ],
     },
+    {
+      // Field parameter (used by two visuals): all three measures are selectable in "Kennzahl nach Sparte"
+      name: 'Kennzahl Auswahl',
+      columns: [{ name: 'Kennzahl Auswahl' }, { name: 'Kennzahl Auswahl Fields' }, { name: 'Kennzahl Auswahl Order' }],
+      measures: [],
+      dax: `{
+    ("Schadenzahl", NAMEOF('Claims'[Schadenzahl]), 0),
+    ("ABGP", NAMEOF([ABGP_Gesamt]), 1),
+    ("Aktive Verträge", NAMEOF(Contracts[Vertrag_Aktiv]), 2)
+}`,
+    },
+    {
+      // Field parameter that no visual uses: its measures are NOT kept alive
+      name: 'Alt Auswahl',
+      columns: [{ name: 'Alt Auswahl' }, { name: 'Alt Auswahl Fields' }, { name: 'Alt Auswahl Order' }],
+      measures: [],
+      dax: `{
+    ("Test", NAMEOF([Test_Measure]), 0),
+    ("Debug", NAMEOF('Finance'[Debug_Measure]), 1)
+}`,
+    },
   ],
   visuals: [
-    { id: 'v1', page: 'Schadenübersicht', name: 'SQ KPI', type: 'KPI', measures: ['[SQ_Gesamt]'], columns: [], fields: [] },
-    { id: 'v2', page: 'Schadenübersicht', name: 'Schadenzahl Card', type: 'Card', measures: ['Claims[Schadenzahl]'], columns: [], fields: [] },
-    { id: 'v3', page: 'Schadenübersicht', name: 'Sparte Slicer', type: 'Slicer', measures: [], columns: ['Contracts[Sparte]'], fields: [] },
-    { id: 'v4', page: 'Vertragsübersicht', name: 'JNP KPI', type: 'KPI', measures: ['[JNP]'], columns: [], fields: [] },
-    { id: 'v5', page: 'Vertragsübersicht', name: 'Vertragsliste', type: 'Table', measures: [], columns: ['Contracts[Vertrag_ID]', 'Contracts[Status]'], fields: [] },
-    { id: 'v6', page: 'Vertragsübersicht', name: 'Schaden nach Sparte', type: 'Clustered Column Chart', measures: ['Claims[Schadenzahl]'], columns: ['Contracts[Sparte]'], fields: [] },
+    { id: 'v1', page: 'Schadenübersicht', pageId: 'page-schaden', name: 'SQ KPI', type: 'KPI', measures: ['[SQ_Gesamt]'], columns: [], fields: [] },
+    { id: 'v2', page: 'Vertragsübersicht', pageId: 'page-vertrag', name: 'Kennzahl Slicer', type: 'Slicer', measures: [], columns: ["'Kennzahl Auswahl'[Kennzahl Auswahl]"], fields: [] },
+    { id: 'v3', page: 'Schadenübersicht', pageId: 'page-schaden', name: 'Sparte Slicer', type: 'Slicer', measures: [], columns: ['Contracts[Sparte]'], fields: [] },
+    { id: 'v4', page: 'Archiv', pageId: 'page-archiv', name: 'JNP KPI', type: 'KPI', measures: ['[JNP]'], columns: [], fields: [] },
+    { id: 'v5', page: 'Vertragsübersicht', pageId: 'page-vertrag', name: 'Vertragsliste', type: 'Table', measures: [], columns: ['Contracts[Vertrag_ID]', 'Contracts[Status]'], fields: [] },
+    { id: 'v6', page: 'Vertragsübersicht', pageId: 'page-vertrag', name: 'Kennzahl nach Sparte', type: 'Clustered Column Chart', measures: [], columns: ["'Kennzahl Auswahl'[Kennzahl Auswahl]", 'Contracts[Sparte]'], fields: [] },
   ],
+  usageMetrics: [
+    { report: 'Demo – Schaden & Vertrag', page: 'Schadenübersicht', views: 500, uniqueUsers: 120, date: '2026-03-01' },
+    { report: 'Demo – Schaden & Vertrag', page: 'Schadenübersicht', views: 450, uniqueUsers: 110, date: '2026-03-02' },
+    { report: 'Demo – Schaden & Vertrag', page: 'Schadenübersicht', views: 300, uniqueUsers: 90, date: '2026-03-03' },
+    { report: 'Demo – Schaden & Vertrag', page: 'Vertragsübersicht', views: 340, uniqueUsers: 80, date: '2026-03-01' },
+    { report: 'Demo – Schaden & Vertrag', page: 'Archiv', views: 0, uniqueUsers: 0, date: '2026-03-01' },
+    { report: 'Demo – Schaden & Vertrag', page: 'Alte Seite', views: 90, uniqueUsers: 25, date: '2026-03-01' },
+    { report: 'Anderer Bericht', page: 'Übersicht', views: 500, uniqueUsers: 140, date: '2026-03-01' },
+  ],
+  usageMeta: {
+    imports: [
+      {
+        id: 'demo-usage',
+        fileName: 'demo-usage-metrics.csv',
+        format: 'csv',
+        importedAt: '2026-03-04T08:00:00.000Z',
+        mapping: { report: 'Report name', page: 'Page name', views: 'Views', uniqueUsers: 'Unique users', date: 'Date' },
+        validRows: 7,
+        skippedRows: 0,
+      },
+    ],
+  },
 };

@@ -4,6 +4,8 @@ import { useApp } from '../../state/AppState';
 import { demoModel } from '../../data/demoData';
 import { importers } from '../../import/registry';
 import { collectDropped, type PathedFile } from '../../import/dropFiles';
+import { isUsageFileName } from '../../import/usageMetrics';
+import { UsageImportPanel } from './UsageImportPanel';
 import { mergeModels, processSources, readFileText, toSource } from '../../import/registry';
 import type { ImportSource } from '../../import/types';
 import { downloadBlob } from '../../utils/export';
@@ -13,6 +15,8 @@ export function ImportPage() {
   const { setModel, navigate, model, currentProject, createProject, closeProject } = useApp();
   const [projName, setProjName] = useState('');
   const [saveIt, setSaveIt] = useState(true);
+  const [usageFile, setUsageFile] = useState<File | null>(null);
+  const [keepUsage, setKeepUsage] = useState(true);
   const [sources, setSources] = useState<ImportSource[]>([]);
   const [paste, setPaste] = useState('');
   const [mode, setMode] = useState<'replace' | 'merge'>('replace');
@@ -21,7 +25,11 @@ export function ImportPage() {
   const folder = useRef<HTMLInputElement>(null);
 
   /** `fromFolder`: unknown / irrelevant files are skipped silently instead of being listed as errors */
-  const readFiles = async (files: PathedFile[], fromFolder = false) => {
+  const readFiles = async (allFiles: PathedFile[], fromFolder = false) => {
+    // CSV / Excel files are usage metrics: hand them to the usage panel (mapping + preview)
+    const usage = allFiles.find((f) => isUsageFileName(f.path));
+    if (usage) setUsageFile(usage.file);
+    const files = allFiles.filter((f) => !isUsageFileName(f.path));
     const list = files.filter((f) => !fromFolder || (/\.(tmdl|json|bim)$/i.test(f.path) && !/(^|[\\/])\.pbi[\\/]/.test(f.path)));
     const res: ImportSource[] = [];
     for (const f of list) res.push(toSource(f.path, await readFileText(f.file), fromFolder));
@@ -43,11 +51,15 @@ export function ImportPage() {
       setModel(mergeModels(model, combined)); // autosaved into the open project
     } else if (mode === 'merge') {
       setModel(mergeModels(model, combined));
-    } else if (saveIt) {
-      await createProject(projName.trim() || defaultName, combined);
     } else {
-      closeProject();
-      setModel(combined);
+      // replacing the model keeps already loaded usage metrics unless the user opts out
+      const next = keepUsage && !combined.usageMetrics && model.usageMetrics ? { ...combined, usageMetrics: model.usageMetrics, usageMeta: model.usageMeta } : combined;
+      if (saveIt) {
+        await createProject(projName.trim() || defaultName, next);
+      } else {
+        closeProject();
+        setModel(next);
+      }
     }
     setSources([]);
     setProjName('');
@@ -70,7 +82,7 @@ export function ImportPage() {
           >
             <Upload className="text-blue-500" />
             <div className="font-medium">Drop files or a whole folder here, or click to browse</div>
-            <div className="text-sm text-slate-500">JSON, <code>model.bim</code>, <code>.tmdl</code>, PBIR <code>visual.json</code>. Select several files at once (e.g. all TMDL tables + the report).</div>
+            <div className="text-sm text-slate-500">JSON, <code>model.bim</code>, <code>.tmdl</code>, PBIR <code>visual.json</code> – or a usage-metrics <code>.csv</code>/<code>.xlsx</code>. Select several files at once (e.g. all TMDL tables + the report).</div>
             <button type="button" className="btn mt-2" onClick={(e) => { e.stopPropagation(); folder.current?.click(); }}><FolderOpen size={14} /> Select PBIP folder</button>
             <input ref={input} type="file" multiple hidden onChange={(e) => e.target.files && void fromInput(e.target.files, false).then(() => { e.target.value = ''; })} />
             <input ref={folder} type="file" hidden onChange={(e) => e.target.files && void fromInput(e.target.files, true).then(() => { e.target.value = ''; })} {...({ webkitdirectory: '', directory: '' } as object)} />
@@ -81,6 +93,8 @@ export function ImportPage() {
             <textarea id="paste" className="input font-mono text-xs" rows={6} value={paste} placeholder='{ "tables": [ … ], "visuals": [ … ] }' onChange={(e) => setPaste(e.target.value)} spellCheck={false} />
             <button className="btn mt-2" disabled={!paste.trim()} onClick={() => { setSources((c) => [...c, toSource('pasted.json', paste)]); setPaste(''); }}>Analyse pasted JSON</button>
           </div>
+
+          <UsageImportPanel incoming={usageFile} onConsumed={() => setUsageFile(null)} />
 
           {outcomes.length > 0 && (
             <div className="card p-4">
@@ -109,6 +123,9 @@ export function ImportPage() {
                       <label className="flex items-center gap-1.5 text-sm"><input type="checkbox" checked={saveIt} onChange={(e) => setSaveIt(e.target.checked)} /> Save as project</label>
                       {saveIt && <input className="input w-56" aria-label="Project name" placeholder={defaultName} value={projName} onChange={(e) => setProjName(e.target.value)} />}
                     </>
+                  )}
+                  {!merging && mode === 'replace' && model.usageMetrics && (
+                    <label className="flex items-center gap-1.5 text-sm"><input type="checkbox" checked={keepUsage} onChange={(e) => setKeepUsage(e.target.checked)} /> Keep loaded usage metrics</label>
                   )}
                   {merging && <span className="text-xs text-slate-500">Merged into “{currentProject?.name}” and saved automatically.</span>}
                   <button className="btn btn-primary" onClick={() => void apply()}>Import &amp; analyse</button>

@@ -1,7 +1,7 @@
 import { AlertTriangle, ArrowRight } from 'lucide-react';
 import { useApp } from '../../state/AppState';
 import { formatCycle } from '../../engine';
-import { EmptyState, PageHeader } from '../common/ui';
+import { EmptyState, PageHeader, UsageDisclaimer, UsageLevelBadge } from '../common/ui';
 import { ExportMenu } from '../common/ExportMenu';
 
 function KpiCard({ value, label, tone, onClick, hint }: { value: number; label: string; tone: string; onClick?: () => void; hint?: string }) {
@@ -39,6 +39,11 @@ export function Dashboard() {
   const mostUsed = [...analysis.measures.values()]
     .filter((m) => m.usedByMeasures.length + m.allVisuals.length > 0)
     .sort((a, b) => (b.usedByMeasures.length + b.allVisuals.length) - (a.usedByMeasures.length + a.allVisuals.length) || a.name.localeCompare(b.name))
+    .slice(0, 8);
+  const usage = analysis.usage;
+  const topReach = [...analysis.measures.values()]
+    .filter((m) => (usage.measures.get(m.id)?.pageViewsPotential ?? 0) > 0)
+    .sort((a, b) => usage.measures.get(b.id)!.pageViewsPotential - usage.measures.get(a.id)!.pageViewsPotential || a.name.localeCompare(b.name))
     .slice(0, 8);
   const pct = (n: number) => (s.totalMeasures ? (n / s.totalMeasures) * 100 : 0);
 
@@ -133,6 +138,48 @@ export function Dashboard() {
           )}
         </section>
       </div>
+
+      <section className="card mt-4 p-5">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="font-semibold">Usage metrics</h2>
+          <button className="text-sm text-blue-600 dark:text-blue-400" onClick={() => navigate('import')}>{usage.hasData ? 'Manage' : 'Import usage metrics'} →</button>
+        </div>
+        {!usage.hasData ? (
+          <p className="text-sm text-slate-500">
+            Loaded: <b>No</b>. Import a Power BI usage-metrics export (CSV / Excel) to see the estimated reach of your measures next to their technical usage.
+          </p>
+        ) : (
+          <>
+            <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+              <div className="rounded-xl border border-slate-200 p-3 dark:border-slate-800"><div className="text-xl font-semibold">Yes</div><div className="text-xs text-slate-500">Usage metrics loaded</div></div>
+              <div className="rounded-xl border border-slate-200 p-3 dark:border-slate-800"><div className="text-xl font-semibold tabular-nums">{usage.totalViews.toLocaleString('en-US')}</div><div className="text-xs text-slate-500">Total views</div></div>
+              <div className="rounded-xl border border-slate-200 p-3 dark:border-slate-800"><div className="text-xl font-semibold tabular-nums">{usage.pages.length}</div><div className="text-xs text-slate-500">Matched pages ({usage.matchedViews.toLocaleString('en-US')} views)</div></div>
+              <div className="rounded-xl border border-slate-200 p-3 dark:border-slate-800"><div className={`text-xl font-semibold tabular-nums ${usage.unmatched.length ? 'text-amber-600' : ''}`}>{usage.unmatched.length}</div><div className="text-xs text-slate-500">Unmatched pages ({usage.unmatchedViews.toLocaleString('en-US')} views)</div></div>
+              <div className="rounded-xl border border-slate-200 p-3 dark:border-slate-800"><div className="text-xl font-semibold tabular-nums">{usage.pagesWithoutUsage.length}</div><div className="text-xs text-slate-500">Model pages without usage rows</div></div>
+            </div>
+            <h3 className="mb-2 mt-4 text-sm font-semibold">Measures with the highest potential reach</h3>
+            <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+              {topReach.map((m) => {
+                const u = usage.measures.get(m.id)!;
+                return (
+                  <li key={m.id}>
+                    <button className="flex w-full items-center gap-3 py-2 text-left text-sm hover:text-blue-600" onClick={() => selectMeasure(m.id)}>
+                      <span className="font-medium">{m.name}</span><UsageLevelBadge level={u.usageStatus} />
+                      <span className="ml-auto text-xs text-slate-500">{u.pageViewsPotential.toLocaleString('en-US')} potential views{u.parameterCandidateViews > 0 ? ` · ${u.parameterCandidateViews.toLocaleString('en-US')} as parameter candidate` : ''}</span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+            {usage.unmatched.length > 0 && (
+              <p className="mt-3 text-xs text-amber-700 dark:text-amber-300">
+                {usage.unmatched.length} usage page(s) could not be matched to the model: {usage.unmatched.slice(0, 4).map((u) => u.page).join(', ')}{usage.unmatched.length > 4 ? ' …' : ''} – see Import.
+              </p>
+            )}
+            <UsageDisclaimer className="mt-4" />
+          </>
+        )}
+      </section>
 
       {analysis.warnings.length > 0 && (
         <section className="card mt-4 p-5">
